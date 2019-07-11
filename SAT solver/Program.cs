@@ -7,11 +7,12 @@ using System.Threading.Tasks;
 
 namespace SAT_solver
 {
+    // Class representing the CNF formula
     class CNF
     {
-        public List<Clause> Clauses { get; private set; }
-        private int NumberOfVariables { get; set; }
-        private int NumberOfClauses { get; set; }
+        public List<Clause> Clauses { get; private set; } // List of all clauses (each connected with conjuction)
+        private int NumberOfVariables { get; set; } // Number of unique variables
+        private int NumberOfClauses { get; set; }   // Number of clauses
 
         public CNF()
         {
@@ -19,6 +20,7 @@ namespace SAT_solver
         }
 
         // Deep copy constructor
+        // Constructs new CNF type with copied VALUE of clauses, variables, ...
         public CNF(CNF cnf)
         {
             List<Clause> ClauseList = new List<Clause>();
@@ -54,12 +56,12 @@ namespace SAT_solver
                 // Read, check and parse first line
                 string[] tokens = reader.ReadLine().Split(' ');
 
-                if (tokens[0] != "cnf")
+                if (tokens[0] != "cnf") // Must begin with "cnf"
                 {
                     throw new FormatException();
                 }
 
-                NumberOfVariables = Convert.ToInt32(tokens[1]);
+                NumberOfVariables = Convert.ToInt32(tokens[1]); // Followed by two integers (any exception is caught)
                 NumberOfClauses = Convert.ToInt32(tokens[2]);
 
                 // Read next lines (clauses)
@@ -88,7 +90,7 @@ namespace SAT_solver
                     Clauses.Add(clause);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex)    // Most likely the formatting was wrong.
             {
                 if (ex is InvalidCastException || ex is IndexOutOfRangeException || ex is FormatException)
                 {
@@ -97,6 +99,7 @@ namespace SAT_solver
             }
         }
 
+        // Returns a list with all variables in the CNF formula
         public List<Variable> GetVariables()
         {
             List<Variable> res = new List<Variable>();
@@ -115,7 +118,7 @@ namespace SAT_solver
         // Gets list of unique variables
         public List<Variable> GetUniqueVariables()
         {
-            List<Variable> res = new List<Variable>();
+            List<Variable> uniqueVariables = new List<Variable>();
             bool added;
 
             foreach (var clause in Clauses)
@@ -123,9 +126,9 @@ namespace SAT_solver
                 foreach (var var in clause.Variables)
                 {
                     added = false;
-                    foreach (var uvar in res)
+                    foreach (var uniqueVar in uniqueVariables)
                     {
-                        if (uvar.Name == var.Name)  // If var is already in the "res" list, do not add it
+                        if (uniqueVar.Name == var.Name)  // If var is already in the uniqueVariables list, do not add it
                         {
                             added = true;
                             break;
@@ -134,17 +137,21 @@ namespace SAT_solver
 
                     if (!added)
                     {
-                        res.Add(var);
+                        uniqueVariables.Add(var);
                     }
                 }
             }
 
-            return res;
+            return uniqueVariables;
         }
 
+        // Converts the model of CNF formula to string, e.g.:
+        // 1: true
+        // 2: false
+        // ...
         public override string ToString()
         {
-            if (Clauses == null)
+            if (Clauses == null)    // If it was not even initialized by 'new', no model can exist
             {
                 return null;
             }
@@ -161,9 +168,10 @@ namespace SAT_solver
         }
     }
 
+    // Class representing one clause in the CNF formula
     class Clause
     {
-        public List<Variable> Variables { get; private set; }
+        public List<Variable> Variables { get; private set; } // List of all variables in the clause
 
         public Clause(List<Variable> variables)
         {
@@ -215,12 +223,13 @@ namespace SAT_solver
         }
     }
 
+    // Class representing a single variable in a clause of a CNF formula
     class Variable
     {
         public bool Sign { get; set; }  // Either positive or negative literal
         public bool Value { get; set; } // Assigned value of the variable
         public bool Assigned { get; set; }  // Indicates whether this variable has been already assigned a value
-        public uint Name { get; private set; }
+        public uint Name { get; private set; }  // Unique identifier
 
         public Variable (bool Sign, bool Value, bool Assigned, uint Name)
         {
@@ -238,6 +247,7 @@ namespace SAT_solver
             this.Name = Name;
         }
 
+        // Returns the final value of the variable ( == takes sign and value into account)
         public bool GetFinalValue()
         {
             if (Sign)
@@ -255,7 +265,7 @@ namespace SAT_solver
         {
             foreach (var variable in cnf.GetVariables())
             {
-                if (variable.Name == this.Name)
+                if (variable.Name == this.Name) // All variables in the formula with the same name get assigned
                 {
                     variable.Value = Value;
                     variable.Assigned = true;
@@ -263,19 +273,20 @@ namespace SAT_solver
             }
         }
 
-        // Sets the Assigned property for the variable in the whole CNF formula.
+        // Sets the Assigned property for the variable in the whole CNF formula to false.
         public void Unassign(CNF cnf)
         {
             foreach (var variable in cnf.GetVariables())
             {
                 if (variable.Name == this.Name)
                 {
-                    Assigned = false;
+                    variable.Assigned = false;
                 }
             }
         }
     }
 
+    // Class representing the DPLL algorithm with its methods and functions.
     class DPLL
     {
         public DPLLResultHolder Satisfiable(CNF cnf)
@@ -307,27 +318,29 @@ namespace SAT_solver
             }
 
             variable = FindUnassigned(cnf);
-            if (variable != null)
+            if (variable != null)   // If we have found a unassigned variable, we are at the decision (branching) point
             {
                 return Branch(cnf, variable);
             }
             else
             {
-                return new DPLLResultHolder(false, null);   // No unassigned variable exist and we did not return SAT yet -> UNSAT
+                return new DPLLResultHolder(false, null);   // Otherwise no unassigned variable exist and we did not return SAT yet -> UNSAT
             }
         }
 
+        // Branch method that tries to assign a variable and solve the CNF recursively
+        // If the assignment failed, try the other assignment value.
         private DPLLResultHolder Branch (CNF cnf, Variable variable)
         {
-            CNF BranchCNF = new CNF(cnf);
-            variable.SetValue(cnf, true);
-            DPLLResultHolder result = Satisfiable(cnf);
+            CNF BranchCNF = new CNF(cnf);   // Copy the CNF formula
+            variable.SetValue(cnf, true);   // Try setting the variable to true in the original CNF formula
+            DPLLResultHolder result = Satisfiable(cnf); // Try solving the original CNF formula
 
-            if (result.SAT)
+            if (result.SAT) // If SAT, we're done
             {
                 return result;
             }
-            else
+            else    // Otherwise try setting the variable to false and try solving the copy of the original formula (original might have changed).
             {
                 variable.SetValue(BranchCNF, false);
                 return Satisfiable(BranchCNF);
@@ -369,7 +382,7 @@ namespace SAT_solver
 
             foreach (var variable in cnf.GetUniqueVariables())
             {
-                if (variable.Assigned)
+                if (variable.Assigned)  // If a variable is assigned we can skip it
                 {
                     continue;
                 }
@@ -394,7 +407,7 @@ namespace SAT_solver
                                 }
                             }
 
-                            if (IsPositive && IsNegative)
+                            if (IsPositive && IsNegative)   // We can skip this variable as it is no pure
                             {
                                 break;
                             }
