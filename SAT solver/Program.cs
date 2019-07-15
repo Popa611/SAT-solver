@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SAT_solver
@@ -289,6 +291,47 @@ namespace SAT_solver
     // Class representing the DPLL algorithm with its methods and functions.
     class DPLL
     {
+        private static Queue<CNF> sharedModelQueue = new Queue<CNF>();    // Queue of work that should be done by other threads (which is shared among them)
+
+        private static bool parallel = false;
+
+        public DPLLResultHolder SatisfiableParallel(CNF cnf)
+        {
+            parallel = true;
+
+            sharedModelQueue.Clear();
+            sharedModelQueue.Enqueue(cnf);  // Initial formula (model) to solve
+
+            IdleThreadsCounter notWorkingThreadsCounter = new IdleThreadsCounter();
+
+            List<SolverThread> threadList = new List<SolverThread>();
+
+            // A temporal thread to start the other working threads
+            Thread starterThread = new Thread(() =>
+            {
+                for (int i = 0; i < Environment.ProcessorCount; i++)
+                {
+                    threadList.Add(new SolverThread(sharedModelQueue, threadList, notWorkingThreadsCounter));
+                }
+
+                lock (sharedModelQueue)    // So threads start working as soon as all threads are started (they will be waiting for this to unlock)
+                {
+                    foreach (var thread in threadList)
+                    {
+                        thread.Start();
+                    }
+                }
+            });
+
+            lock (SolverThread.SharedResult)
+            {
+                starterThread.Start();
+                Monitor.Wait(SolverThread.SharedResult);    // Wait for the final result
+                parallel = false;
+                return SolverThread.SharedResult;
+            }
+        }
+
         public DPLLResultHolder Satisfiable(CNF cnf)
         {
             List<Clause> clauses = cnf.Clauses;
@@ -303,15 +346,17 @@ namespace SAT_solver
                 return new DPLLResultHolder(false, null);
             }
 
-            Variable variable = GetPureVariable(cnf);
-            if (variable != null)   // If we have found a pure literal, we can set it so it is true in all clauses.
+            // Unit propagation
+            Variable variable = GetUnitClause(cnf);
+            if (variable != null)   // If we have found a unit clause, we can set it so it is true
             {
                 variable.SetValue(cnf, variable.Sign);
                 return Satisfiable(cnf);
             }
 
-            variable = GetUnitClause(cnf);
-            if (variable != null)   // If we have found a unit clause, we can set it so it is true
+            // Pure literal elimination
+            variable = GetPureVariable(cnf);
+            if (variable != null)   // If we have found a pure literal, we can set it so it is true in all clauses.
             {
                 variable.SetValue(cnf, variable.Sign);
                 return Satisfiable(cnf);
@@ -332,18 +377,71 @@ namespace SAT_solver
         // If the assignment failed, try the other assignment value.
         private DPLLResultHolder Branch (CNF cnf, Variable variable)
         {
-            CNF BranchCNF = new CNF(cnf);   // Copy the CNF formula
-            variable.SetValue(cnf, true);   // Try setting the variable to true in the original CNF formula
-            DPLLResultHolder result = Satisfiable(cnf); // Try solving the original CNF formula
+            if (!parallel)
+            {
+                CNF BranchCNF = new CNF(cnf);   // Copy the CNF formula
+                variable.SetValue(cnf, true);   // Try setting the variable to true in the original CNF formula
+                DPLLResultHolder result = Satisfiable(cnf); // Try solving the original CNF formula
 
-            if (result.SAT) // If SAT, we're done
-            {
-                return result;
+                if (result.SAT) // If SAT, we're done
+                {
+                    return result;
+                }
+                else    // Otherwise try setting the variable to false and try solving the copy of the original formula (original might have changed).
+                {
+                    variable.SetValue(BranchCNF, false);
+                    return Satisfiable(BranchCNF);
+                }
             }
-            else    // Otherwise try setting the variable to false and try solving the copy of the original formula (original might have changed).
+            else
             {
+                // NAIVE THREADING
+                /*CNF BranchCNF = new CNF(cnf);
+                variable.SetValue(cnf, true);
+
+                DPLLResultHolder otherThreadResult = null;
+                Thread otherThread = new Thread(() =>
+                {
+                    variable.SetValue(BranchCNF, false);
+                    otherThreadResult = Satisfiable(BranchCNF);
+                });
+                otherThread.Start();
+
+                DPLLResultHolder result = Satisfiable(cnf);
+
+                if (result.SAT)
+                {
+                    return result;
+                }
+
+                otherThread.Join();
+                
+                if (otherThreadResult.SAT)
+                {
+                    return otherThreadResult;
+                }
+
+                return new DPLLResultHolder(false, null);*/
+
+                // BETTER THREADING
+                CNF BranchCNF = new CNF(cnf);
+                variable.SetValue(cnf, true);
                 variable.SetValue(BranchCNF, false);
-                return Satisfiable(BranchCNF);
+
+                lock (sharedModelQueue)
+                {
+                    sharedModelQueue.Enqueue(BranchCNF);
+                    Monitor.Pulse(sharedModelQueue);
+                }
+
+                DPLLResultHolder result = Satisfiable(cnf);
+
+                if (result.SAT)
+                {
+                    return result;
+                }
+
+                return new DPLLResultHolder(false, null);
             }
         }
 
@@ -483,8 +581,8 @@ namespace SAT_solver
     // Holds the result of satisfiability problem.
     class DPLLResultHolder
     {
-        public bool SAT { get; private set; }  // True if a CNF is satisfiable. Otherwise false.
-        public CNF Model { get; private set; } // Holds the model of the CNF if CNF is satisfiable. If SAT is false, it should not be read (set to null preferably)
+        public bool SAT { get; set; }  // True if a CNF is satisfiable. Otherwise false.
+        public CNF Model { get; set; } // Holds the model of the CNF if CNF is satisfiable. If SAT is false, it should not be read (set to null preferably)
 
         public DPLLResultHolder(bool SAT, CNF Model)
         {
@@ -502,6 +600,117 @@ namespace SAT_solver
             {
                 return "Unsatisfiable.";
             }
+        }
+    }
+
+    class SolverThread
+    {
+        private Thread thread { get; set; } // Reference to a thread to be run
+
+        private Queue<CNF> sharedModelQueue { get; }    // Shared queue of models to solve
+
+        private List<SolverThread> threadList;    // List of all run threads (when the result is known, one of the threads aborts the others)
+
+        private IdleThreadsCounter idleThreadsCounter;  // Reference to a count of idle threads
+
+        public static DPLLResultHolder SharedResult = new DPLLResultHolder(false, null);    // The result of the solving threads
+
+        public SolverThread(Queue<CNF> sharedModelQueue, List<SolverThread> threadList, IdleThreadsCounter notWorkingThreadsCounter)
+        {
+            thread = new Thread(() => ThreadWork());
+            this.sharedModelQueue = sharedModelQueue;
+            this.threadList = threadList;
+            this.idleThreadsCounter = notWorkingThreadsCounter;
+        }
+
+        public void Start()
+        {
+            thread.Start();
+        }
+
+        public void Abort()
+        {
+            thread.Abort();
+        }
+
+        // Each thread's main function
+        private void ThreadWork()
+        {
+            while (true)
+            {
+                DPLL parallelDPLL = new DPLL();
+                CNF model;
+
+                lock (sharedModelQueue)
+                {
+                    while (sharedModelQueue.Count == 0)
+                    {
+                        Monitor.Wait(sharedModelQueue); // Wait if there's nothing to solve
+                    }
+
+                    Interlocked.Decrement(ref idleThreadsCounter.Counter);  // One thread started working - is no longer idle
+                    model = sharedModelQueue.Dequeue(); // Else get a CNF model from the shared queue
+                }
+
+                DPLLResultHolder solverThreadResult = parallelDPLL.Satisfiable(model);
+
+                if (solverThreadResult.SAT)
+                {
+                    lock (SharedResult)
+                    {
+                        SharedResult.SAT = solverThreadResult.SAT;
+                        SharedResult.Model = solverThreadResult.Model;
+
+                        foreach (var thread in threadList)
+                        {
+                            if (thread.thread != Thread.CurrentThread)  // We got the result, abort all other threads
+                            {
+                                thread.Abort();
+                            }
+                        }
+
+                        Monitor.Pulse(SharedResult);    // Tell the main thread that the result is ready
+
+                        return;
+                    }
+                }
+                else
+                {
+                    Interlocked.Increment(ref idleThreadsCounter.Counter);  // The thread is idle for now
+                }
+
+                lock (sharedModelQueue)
+                {
+                    // If all threads are idle and the queue is empty -> we're done and result remains unsat
+                    if (Interlocked.Read(ref idleThreadsCounter.Counter) == Environment.ProcessorCount && sharedModelQueue.Count == 0)
+                    {
+                        lock (SharedResult)
+                        {
+                            foreach (var thread in threadList)
+                            {
+                                if (thread.thread != Thread.CurrentThread)
+                                {
+                                    thread.Abort();
+                                }
+                            }
+
+                            Monitor.Pulse(SharedResult);
+
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    class IdleThreadsCounter
+    {
+        public long Counter;    // Counts the number of idle threads
+
+        public IdleThreadsCounter()
+        {
+            Counter = Environment.ProcessorCount;
         }
     }
 
@@ -536,15 +745,38 @@ namespace SAT_solver
                 }
                 catch (FormatException)
                 {
+                    Console.WriteLine();
                     Console.WriteLine("Invalid input format!");
+                    Console.WriteLine();
                     PrintUsage();
                 }
             }
 
-            DPLL dpll = new DPLL();
-            DPLLResultHolder result = dpll.Satisfiable(cnf);
+            CNF cnfCopy = new CNF(cnf);
+
+            Stopwatch stopwatch = new Stopwatch();
+
+            DPLL sequentialDPLL = new DPLL();
+            stopwatch.Start();
+            DPLLResultHolder sequentialResult = sequentialDPLL.Satisfiable(cnf);
+            stopwatch.Stop();
             Console.WriteLine();
-            Console.WriteLine(result);
+            Console.WriteLine(sequentialResult);
+
+            var seq = stopwatch.Elapsed;
+            stopwatch.Reset();
+
+            DPLL parallelDPLL = new DPLL();
+            stopwatch.Start();
+            DPLLResultHolder parallelResult = parallelDPLL.SatisfiableParallel(cnfCopy);
+            stopwatch.Stop();
+            Console.WriteLine();
+            Console.WriteLine(parallelResult);
+
+            Console.WriteLine("Sequential: {0}", seq);
+            Console.WriteLine("Parallel: {0}", stopwatch.Elapsed);
+
+            
         }
     }
 }
