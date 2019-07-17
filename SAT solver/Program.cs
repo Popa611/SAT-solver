@@ -21,6 +21,13 @@ namespace SAT_solver
             Clauses = new List<Clause>();
         }
 
+        public CNF(List<Clause> Clauses)
+        {
+            this.Clauses = Clauses;
+
+            NumberOfClauses = Clauses.Count;
+        }
+
         // Deep copy constructor
         // Constructs new CNF type with copied VALUE of clauses, variables, ...
         public CNF(CNF cnf)
@@ -51,7 +58,7 @@ namespace SAT_solver
             List<Variable> variables = new List<Variable>();
             Clause clause;
             bool sign;  // sign and name for variables parsing
-            uint name;
+            string name;
 
             try
             {
@@ -75,12 +82,12 @@ namespace SAT_solver
                         if (token[0] == '-')    // Negation of a variable
                         {
                             sign = false;
-                            name = Convert.ToUInt32(token.Remove(0, 1));    // Remove the minus sign and use the number as a name
+                            name = token.Remove(0, 1);    // Remove the minus sign and use the number as a name
                         }
                         else
                         {
                             sign = true;
-                            name = Convert.ToUInt32(token);
+                            name = token;
                         }
 
                         variable = new Variable(sign, name);
@@ -231,9 +238,9 @@ namespace SAT_solver
         public bool Sign { get; set; }  // Either positive or negative literal
         public bool Value { get; set; } // Assigned value of the variable
         public bool Assigned { get; set; }  // Indicates whether this variable has been already assigned a value
-        public uint Name { get; private set; }  // Unique identifier
+        public string Name { get; private set; }  // Unique identifier
 
-        public Variable (bool Sign, bool Value, bool Assigned, uint Name)
+        public Variable (bool Sign, bool Value, bool Assigned, string Name)
         {
             this.Sign = Sign;
             this.Value = Value;
@@ -241,10 +248,10 @@ namespace SAT_solver
             this.Name = Name;
         }
 
-        public Variable (bool Sign, uint Name)
+        public Variable (bool Sign, string Name)
         {
             this.Sign = Sign;
-            Value = true;
+            Value = false;
             Assigned = false;
             this.Name = Name;
         }
@@ -714,6 +721,173 @@ namespace SAT_solver
         }
     }
 
+    class IndependentSetProblem
+    {
+        public Graph Graph = new Graph();
+
+        public int K { get; set; }  // Does an independent set of size atleast K in a graph exist?
+
+        public void ReadInput(TextReader reader)
+        {
+            var line = reader.ReadLine();
+            K = Convert.ToInt32(line);
+            Graph.ReadGraph(reader);
+        }
+
+        // Graph vertices must be named 0, 1, 2, ... (starting from zero!)
+        public CNF ConvertToCNF()
+        {
+            List<Clause> clauses = new List<Clause>();
+
+            foreach (var vertex in Graph.Vertices)
+            {
+                foreach (var neighbour in vertex.Neighbours)    // For each edge ij add a clause (!v_i || !v_j)  (which corresponds to independency)
+                {
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id), new Variable(false, neighbour.Id) }));
+                }
+            }
+
+            // Create clauses (!X_ij || !X_kj) for i != k
+            for (int i = 0; i < K; i++)
+            {
+                for (int j = 0; j < Graph.Vertices.Count; j++)
+                {
+                    Variable X_ij = new Variable(false, "X"+i.ToString() + j.ToString());
+
+                    for (int k = 0; k < K; k++)
+                    {
+                        if (i == k)
+                        {
+                            continue;
+                        }
+
+                        Variable X_kj = new Variable(false, "X"+k.ToString() + j.ToString());
+                        clauses.Add(new Clause(new List<Variable> { X_ij, X_kj }));
+                    }
+                }
+            }
+
+            // Create clauses (!X_ij || !X_ik) for j != k
+            for (int i = 0; i < K; i++)
+            {
+                for (int j = 0; j < Graph.Vertices.Count; j++)
+                {
+                    Variable X_ij = new Variable(false, "X"+i.ToString() + j.ToString());
+
+                    for (int k = 0; k < Graph.Vertices.Count; k++)
+                    {
+                        if (j == k)
+                        {
+                            continue;
+                        }
+
+                        Variable X_ik = new Variable(false, "X"+i.ToString() + k.ToString());
+                        clauses.Add(new Clause(new List<Variable> { X_ij, X_ik }));
+                    }
+                }
+            }
+
+            // Create clauses (X_i0 || X_i1 || ... || X_in)
+            for (int i = 0; i < K; i++)
+            {
+                List<Variable> variables = new List<Variable>();
+
+                for (int j = 0; j < Graph.Vertices.Count; j++)
+                {
+                    variables.Add(new Variable(true, "X"+i.ToString() + j.ToString()));
+                }
+
+                if (variables.Count != 0)
+                {
+                    clauses.Add(new Clause(variables));
+                }
+            }
+
+            // Create clauses (!X_ij || vertex_j)
+            for (int i = 0; i < K; i++)
+            {
+                for (int j = 0; j < Graph.Vertices.Count; j++)
+                {
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, "X"+i.ToString() + j.ToString()), new Variable(true, j.ToString()) }));
+                }
+            }
+
+            return new CNF(clauses);
+        }
+    }
+
+    class Graph
+    {
+        public List<Vertex> Vertices;
+
+        public Graph()
+        {
+            Vertices = new List<Vertex>();
+        }
+
+        public void ReadGraph(TextReader reader)
+        {
+            var line = reader.ReadLine();
+            var tokens = line.Split(' ');
+
+            foreach (var token in tokens)
+            {
+                Vertices.Add(new Vertex(token));
+            }
+
+            if (Vertices.Count == 0)    // Empty graphs not supported
+                throw new FormatException();
+
+            while(true)
+            {
+                line = reader.ReadLine();
+                
+                if (line == "")
+                {
+                    break;
+                }
+
+                tokens = line.Split(' ');
+
+                var vertex1 = GetVertexById(tokens[0]);
+                var vertex2 = GetVertexById(tokens[1]);
+
+                vertex1.AddNeighbour(vertex2);
+                vertex2.AddNeighbour(vertex1);
+            }
+        }
+
+        private Vertex GetVertexById(string Id)
+        {
+            foreach (var vertex in Vertices)
+            {
+                if (vertex.Id == Id)
+                {
+                    return vertex;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    class Vertex
+    {
+        public string Id { get; set; }
+        public List<Vertex> Neighbours;
+
+        public Vertex(string Id)
+        {
+            this.Id = Id;
+            Neighbours = new List<Vertex>();
+        }
+
+        public void AddNeighbour(Vertex Vertex)
+        {
+            Neighbours.Add(Vertex);
+        }
+    }
+
     class Program
     {
         static void PrintUsage()
@@ -735,12 +909,14 @@ namespace SAT_solver
         {
             PrintUsage();
             CNF cnf = new CNF();
+            IndependentSetProblem independentSetProblem = new IndependentSetProblem();
 
             while (true)
             {
                 try
                 {
-                    cnf.ReadFormula(Console.In);
+                    //cnf.ReadFormula(Console.In);
+                    independentSetProblem.ReadInput(Console.In);
                     break;
                 }
                 catch (FormatException)
@@ -752,11 +928,18 @@ namespace SAT_solver
                 }
             }
 
+            var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
+
+            DPLL independentSetProblemDPLL = new DPLL();
+            DPLLResultHolder independentSetProblemDPLLResult = independentSetProblemDPLL.Satisfiable(independentSetProblemCNF);
+            Console.WriteLine();
+            Console.WriteLine(independentSetProblemDPLLResult);
+
             CNF cnfCopy = new CNF(cnf);
 
             Stopwatch stopwatch = new Stopwatch();
 
-            DPLL sequentialDPLL = new DPLL();
+            /*DPLL sequentialDPLL = new DPLL();
             stopwatch.Start();
             DPLLResultHolder sequentialResult = sequentialDPLL.Satisfiable(cnf);
             stopwatch.Stop();
@@ -774,7 +957,7 @@ namespace SAT_solver
             Console.WriteLine(parallelResult);
 
             Console.WriteLine("Sequential: {0}", seq);
-            Console.WriteLine("Parallel: {0}", stopwatch.Elapsed);
+            Console.WriteLine("Parallel: {0}", stopwatch.Elapsed);*/
 
             
         }
