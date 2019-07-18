@@ -13,19 +13,22 @@ namespace SAT_solver
     class CNF
     {
         public List<Clause> Clauses { get; private set; } // List of all clauses (each connected with conjuction)
+        public List<Variable> Variables { get; private set; }   // List of all unique variables
         private int NumberOfVariables { get; set; } // Number of unique variables
         private int NumberOfClauses { get; set; }   // Number of clauses
 
         public CNF()
         {
             Clauses = new List<Clause>();
+            Variables = new List<Variable>();
         }
 
         public CNF(List<Clause> Clauses)
         {
             this.Clauses = Clauses;
-
+            Variables = GetUniqueVariables();
             NumberOfClauses = Clauses.Count;
+            NumberOfVariables = Variables.Count();
         }
 
         // Deep copy constructor
@@ -47,6 +50,7 @@ namespace SAT_solver
             }
 
             Clauses = ClauseList;
+            Variables = GetUniqueVariables();
             NumberOfVariables = cnf.NumberOfVariables;
             NumberOfClauses = cnf.NumberOfClauses;
         }
@@ -98,6 +102,8 @@ namespace SAT_solver
                     variables.Clear();
                     Clauses.Add(clause);
                 }
+
+                Variables = GetUniqueVariables();
             }
             catch (Exception ex)    // Most likely the formatting was wrong.
             {
@@ -166,9 +172,8 @@ namespace SAT_solver
             }
 
             StringBuilder stringBuilder = new StringBuilder();
-            List<Variable> variables = GetUniqueVariables();
 
-            foreach (var variable in variables)
+            foreach (var variable in Variables)
             {
                 stringBuilder.Append(String.Format("{0}: {1}\n", variable.Name, variable.Value));
             }
@@ -482,10 +487,10 @@ namespace SAT_solver
         // This function finds such variable.
         private Variable GetPureVariable(CNF cnf)
         {
-            /*bool IsPositive;
+            bool IsPositive;
             bool IsNegative;
 
-            foreach (var variable in cnf.GetUniqueVariables())
+            foreach (var variable in cnf.Variables)
             {
                 if (variable.Assigned)  // If a variable is assigned we can skip it
                 {
@@ -546,43 +551,6 @@ namespace SAT_solver
                     });
 
                     cnf.Clauses.Add(new Clause(new List<Variable>{ new Variable(true, true, true, variable.Name)}));
-                }
-            }*/
-
-            foreach (var variable in cnf.GetUniqueVariables())
-            {
-                bool occured_positively = false;
-                bool occured_negatively = false;
-
-                foreach (var clause in cnf.Clauses)
-                {
-                    if (!clause.IsTrue())
-                    {
-                        foreach (var clauseVar in clause.Variables)
-                        {
-                            if (clauseVar.Name == variable.Name)
-                            {
-                                if (clauseVar.Assigned && !clauseVar.Sign)
-                                {
-                                    occured_negatively = true;
-                                }
-                                else if (clauseVar.Assigned && clauseVar.Sign)
-                                {
-                                    occured_positively = true;
-                                }
-                            }
-
-                            if (occured_positively && occured_negatively)
-                            {
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (occured_positively && occured_negatively)
-                {
-                    return variable;
                 }
             }
 
