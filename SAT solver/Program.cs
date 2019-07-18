@@ -482,7 +482,7 @@ namespace SAT_solver
         // This function finds such variable.
         private Variable GetPureVariable(CNF cnf)
         {
-            bool IsPositive;
+            /*bool IsPositive;
             bool IsNegative;
 
             foreach (var variable in cnf.GetUniqueVariables())
@@ -530,6 +530,57 @@ namespace SAT_solver
                     continue;
                 }
                 else
+                {
+                    //return variable;
+                    cnf.Clauses.RemoveAll(x =>
+                    {
+                        foreach (var v in x.Variables)
+                        {
+                            if (v.Name == variable.Name)
+                            {
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    });
+
+                    cnf.Clauses.Add(new Clause(new List<Variable>{ new Variable(true, true, true, variable.Name)}));
+                }
+            }*/
+
+            foreach (var variable in cnf.GetUniqueVariables())
+            {
+                bool occured_positively = false;
+                bool occured_negatively = false;
+
+                foreach (var clause in cnf.Clauses)
+                {
+                    if (!clause.IsTrue())
+                    {
+                        foreach (var clauseVar in clause.Variables)
+                        {
+                            if (clauseVar.Name == variable.Name)
+                            {
+                                if (clauseVar.Assigned && !clauseVar.Sign)
+                                {
+                                    occured_negatively = true;
+                                }
+                                else if (clauseVar.Assigned && clauseVar.Sign)
+                                {
+                                    occured_positively = true;
+                                }
+                            }
+
+                            if (occured_positively && occured_negatively)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (occured_positively && occured_negatively)
                 {
                     return variable;
                 }
@@ -746,7 +797,7 @@ namespace SAT_solver
                     clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id), new Variable(false, neighbour.Id) }));
                 }
             }
-
+            
             // Create clauses (!X_ij || !X_kj) for i != k
             for (int i = 0; i < K; i++)
             {
@@ -915,8 +966,8 @@ namespace SAT_solver
             {
                 try
                 {
-                    //cnf.ReadFormula(Console.In);
-                    independentSetProblem.ReadInput(Console.In);
+                    cnf.ReadFormula(Console.In);
+                    //independentSetProblem.ReadInput(Console.In);
                     break;
                 }
                 catch (FormatException)
@@ -928,18 +979,18 @@ namespace SAT_solver
                 }
             }
 
-            var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
+            /*var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
 
             DPLL independentSetProblemDPLL = new DPLL();
             DPLLResultHolder independentSetProblemDPLLResult = independentSetProblemDPLL.Satisfiable(independentSetProblemCNF);
             Console.WriteLine();
-            Console.WriteLine(independentSetProblemDPLLResult);
+            Console.WriteLine(independentSetProblemDPLLResult);*/
 
             CNF cnfCopy = new CNF(cnf);
 
             Stopwatch stopwatch = new Stopwatch();
 
-            /*DPLL sequentialDPLL = new DPLL();
+            DPLL sequentialDPLL = new DPLL();
             stopwatch.Start();
             DPLLResultHolder sequentialResult = sequentialDPLL.Satisfiable(cnf);
             stopwatch.Stop();
@@ -957,7 +1008,7 @@ namespace SAT_solver
             Console.WriteLine(parallelResult);
 
             Console.WriteLine("Sequential: {0}", seq);
-            Console.WriteLine("Parallel: {0}", stopwatch.Elapsed);*/
+            Console.WriteLine("Parallel: {0}", stopwatch.Elapsed);
 
             
         }
