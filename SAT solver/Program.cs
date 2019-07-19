@@ -66,41 +66,68 @@ namespace SAT_solver
 
             try
             {
-                // Read, check and parse first line
-                string[] tokens = reader.ReadLine().Split(' ');
+                string[] tokens;
 
-                if (tokens[0] != "cnf") // Must begin with "cnf"
+                while (true)
+                {
+                    // Skip comment lines (starting with 'c '
+                     tokens = reader.ReadLine().Split(' ', '\t');
+
+                    if (tokens[0] != "c")
+                    {
+                        break;
+                    }
+                }
+
+                if (tokens[0] != "p" && tokens[1] != "cnf") // Must begin with "p cnf"
                 {
                     throw new FormatException();
                 }
 
-                NumberOfVariables = Convert.ToInt32(tokens[1]); // Followed by two integers (any exception is caught)
-                NumberOfClauses = Convert.ToInt32(tokens[2]);
+                NumberOfVariables = Convert.ToInt32(tokens[2]); // Followed by two integers (any exception is caught)
+                NumberOfClauses = Convert.ToInt32(tokens[3]);
 
                 // Read next lines (clauses)
-                for (int i = 0; i < NumberOfClauses; i++)
+                int clausesRead = 0;
+                while (true)
                 {
-                    tokens = reader.ReadLine().Split(' ');
-                    foreach (var token in tokens)   // For each variable
+                    if (clausesRead == NumberOfClauses)
                     {
-                        if (token[0] == '-')    // Negation of a variable
+                        break;
+                    }
+
+                    tokens = reader.ReadLine().Split(' ', '\t');
+                    for (int j = 0; j < tokens.Length; j++)
+                    {
+                        if (tokens[j] == "0")
+                        {
+                            clause = new Clause(variables);
+                            variables.Clear();
+                            Clauses.Add(clause);
+                            clausesRead++;
+                            continue;
+                        }
+                        if (tokens[j] == "")
+                            continue;
+                        if (tokens[j] == "c")
+                            break;
+
+                        if (tokens[j][0] == '-')    // Negation of a variable
                         {
                             sign = false;
-                            name = token.Remove(0, 1);    // Remove the minus sign and use the number as a name
+                            name = tokens[j].Remove(0, 1);    // Remove the minus sign and use the number as a name
                         }
                         else
                         {
                             sign = true;
-                            name = token;
+                            name = tokens[j];
                         }
 
                         variable = new Variable(sign, name);
                         variables.Add(variable);
                     }
 
-                    clause = new Clause(variables);
-                    variables.Clear();
-                    Clauses.Add(clause);
+                    
                 }
 
                 Variables = GetUniqueVariables();
@@ -536,21 +563,12 @@ namespace SAT_solver
                 }
                 else
                 {
-                    //return variable;
-                    cnf.Clauses.RemoveAll(x =>
-                    {
-                        foreach (var v in x.Variables)
-                        {
-                            if (v.Name == variable.Name)
-                            {
-                                return true;
-                            }
-                        }
+                    if (IsPositive)
+                        variable.Sign = true;
+                    else
+                        variable.Sign = false;
 
-                        return false;
-                    });
-
-                    cnf.Clauses.Add(new Clause(new List<Variable>{ new Variable(true, true, true, variable.Name)}));
+                    return variable;
                 }
             }
 
