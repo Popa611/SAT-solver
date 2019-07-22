@@ -43,7 +43,7 @@ namespace SAT_solver
 
                 foreach (var variable in clause.Variables)
                 {
-                    VarList.Add(new Variable(variable.Sign, variable.Value, variable.Assigned, variable.Name));
+                    VarList.Add(new Variable(variable.Sign, false, false, variable.Name));
                 }
 
                 ClauseList.Add(new Clause(VarList));
@@ -203,6 +203,41 @@ namespace SAT_solver
             foreach (var variable in Variables)
             {
                 stringBuilder.Append(String.Format("{0}: {1}\n", variable.Name, variable.Value));
+            }
+
+            return stringBuilder.ToString();
+        }
+
+        public string GetInputFormat()
+        {
+            StringBuilder stringBuilder = new StringBuilder();
+
+            stringBuilder.Append(String.Format("p cnf {0} {1}\n", Variables.Count, Clauses.Count));
+
+            int nameCounter = 1;
+
+            Dictionary<string, int> X = new Dictionary<string, int>();
+
+            foreach (var variable in Variables)
+            {
+                X[variable.Name] = nameCounter++;
+            }
+
+            foreach (var clause in Clauses)
+            {
+                foreach (var variable in clause.Variables)
+                {
+                    string sign;
+
+                    if (variable.Sign)
+                        sign = "";
+                    else
+                        sign = "-";
+
+                    stringBuilder.Append(String.Format("{0}{1} ", sign, X[variable.Name]));
+                }
+
+                stringBuilder.Append("0\n");
             }
 
             return stringBuilder.ToString();
@@ -771,7 +806,6 @@ namespace SAT_solver
             Graph.ReadGraph(reader);
         }
 
-        // Graph vertices must be named 0, 1, 2, ... (starting from zero!)
         public CNF ConvertToCNF()
         {
             List<Clause> clauses = new List<Clause>();
@@ -785,13 +819,13 @@ namespace SAT_solver
             }
             
             // Create clauses (!X_ij || !X_kj) for i != k
-            for (int i = 0; i < K; i++)
+            for (int i = 1; i <= K; i++)
             {
-                for (int j = 0; j < Graph.Vertices.Count; j++)
+                for (int j = 1; j <= Graph.Vertices.Count; j++)
                 {
                     Variable X_ij = new Variable(false, "X"+i.ToString() + j.ToString());
 
-                    for (int k = 0; k < K; k++)
+                    for (int k = 1; k <= K; k++)
                     {
                         if (i == k)
                         {
@@ -805,13 +839,13 @@ namespace SAT_solver
             }
 
             // Create clauses (!X_ij || !X_ik) for j != k
-            for (int i = 0; i < K; i++)
+            for (int i = 1; i <= K; i++)
             {
-                for (int j = 0; j < Graph.Vertices.Count; j++)
+                for (int j = 1; j <= Graph.Vertices.Count; j++)
                 {
                     Variable X_ij = new Variable(false, "X"+i.ToString() + j.ToString());
 
-                    for (int k = 0; k < Graph.Vertices.Count; k++)
+                    for (int k = 1; k <= Graph.Vertices.Count; k++)
                     {
                         if (j == k)
                         {
@@ -825,11 +859,11 @@ namespace SAT_solver
             }
 
             // Create clauses (X_i0 || X_i1 || ... || X_in)
-            for (int i = 0; i < K; i++)
+            for (int i = 1; i <= K; i++)
             {
                 List<Variable> variables = new List<Variable>();
 
-                for (int j = 0; j < Graph.Vertices.Count; j++)
+                for (int j = 1; j <= Graph.Vertices.Count; j++)
                 {
                     variables.Add(new Variable(true, "X"+i.ToString() + j.ToString()));
                 }
@@ -841,9 +875,9 @@ namespace SAT_solver
             }
 
             // Create clauses (!X_ij || vertex_j)
-            for (int i = 0; i < K; i++)
+            for (int i = 1; i <= K; i++)
             {
-                for (int j = 0; j < Graph.Vertices.Count; j++)
+                for (int j = 1; j <= Graph.Vertices.Count; j++)
                 {
                     clauses.Add(new Clause(new List<Variable> { new Variable(false, "X"+i.ToString() + j.ToString()), new Variable(true, j.ToString()) }));
                 }
@@ -965,12 +999,21 @@ namespace SAT_solver
                 }
             }
 
-            /*var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
+            //var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
 
-            DPLL independentSetProblemDPLL = new DPLL();
+            //Console.WriteLine(independentSetProblemCNF.GetInputFormat());
+
+            /*DPLL independentSetProblemDPLL = new DPLL();
             DPLLResultHolder independentSetProblemDPLLResult = independentSetProblemDPLL.Satisfiable(independentSetProblemCNF);
             Console.WriteLine();
-            Console.WriteLine(independentSetProblemDPLLResult);*/
+            Console.WriteLine(independentSetProblemDPLLResult);
+
+            CNF independentSetProblemCNFCopy = new CNF(independentSetProblemCNF);
+
+            DPLL independentSetProblemDPLLParallel = new DPLL();
+            DPLLResultHolder independentSetProblemDPLLResultParallel = independentSetProblemDPLLParallel.SatisfiableParallel(independentSetProblemCNFCopy);
+            Console.WriteLine();
+            Console.WriteLine(independentSetProblemDPLLResultParallel);*/
 
             CNF cnfCopy = new CNF(cnf);
 
@@ -996,7 +1039,7 @@ namespace SAT_solver
             Console.WriteLine("Sequential: {0}", seq);
             Console.WriteLine("Parallel: {0}", stopwatch.Elapsed);
 
-            
+
         }
     }
 }
