@@ -43,7 +43,7 @@ namespace SAT_solver
 
                 foreach (var variable in clause.Variables)
                 {
-                    VarList.Add(new Variable(variable.Sign, false, false, variable.Name));
+                    VarList.Add(new Variable(variable.Sign, variable.Value, variable.Assigned, variable.Name));
                 }
 
                 ClauseList.Add(new Clause(VarList));
@@ -352,6 +352,9 @@ namespace SAT_solver
         // Sets the Assigned property for the variable in the whole CNF formula to false.
         public void Unassign(CNF cnf)
         {
+            if (this.Assigned == false)
+                return;
+
             foreach (var variable in cnf.GetVariables())
             {
                 if (variable.Name == this.Name)
@@ -408,114 +411,84 @@ namespace SAT_solver
 
         public DPLLResultHolder Satisfiable(CNF cnf)
         {
-            List<Clause> clauses = cnf.Clauses;
+            Stack<CNF> stack = new Stack<CNF>();
+            stack.Push(cnf);
 
-            if (AllClausesTrue(clauses))    // Formula is already satisfiable with current partial model
+            while (stack.Count != 0)
             {
-                return new DPLLResultHolder(true, cnf);
+                List<Clause> clauses = stack.Peek().Clauses;
+
+                if (AllClausesTrue(clauses))    // Formula is already satisfiable with current partial model
+                {
+                    return new DPLLResultHolder(true, stack.Peek());
+                }
+
+                if (OneClauseFalse(clauses))    // One clause in the partial model is already false -> unsatisfiable
+                {
+                    stack.Pop();    // Pops an unsat model and continues solving others on the stack
+
+                    continue;
+                }
+
+                // Unit propagation
+                Variable variable = GetUnitClause(stack.Peek());
+                if (variable != null)   // If we have found a unit clause, we can set it so it is true
+                {
+                    variable.SetValue(stack.Peek(), variable.Sign);
+                    continue;
+                }
+
+                // Pure literal elimination
+                variable = GetPureVariable(stack.Peek());
+                if (variable != null)   // If we have found a pure literal, we can set it so it is true in all clauses.
+                {
+                    variable.SetValue(stack.Peek(), variable.Sign);
+                    continue;
+                }
+
+                variable = FindUnassigned(stack.Peek());
+                if (variable != null)   // If we have found a unassigned variable, we are at the decision (branching) point
+                {
+                    Branch(stack, variable);
+
+                    continue;
+                }
+                else
+                {
+                    stack.Pop();   // Otherwise no unassigned variable exist and we did not return SAT yet -> this model is UNSAT
+                }
             }
 
-            if (OneClauseFalse(clauses))    // One clause in the partial model is already false -> unsatisfiable
-            {
-                return new DPLLResultHolder(false, null);
-            }
-
-            // Unit propagation
-            Variable variable = GetUnitClause(cnf);
-            if (variable != null)   // If we have found a unit clause, we can set it so it is true
-            {
-                variable.SetValue(cnf, variable.Sign);
-                return Satisfiable(cnf);
-            }
-
-            // Pure literal elimination
-            variable = GetPureVariable(cnf);
-            if (variable != null)   // If we have found a pure literal, we can set it so it is true in all clauses.
-            {
-                variable.SetValue(cnf, variable.Sign);
-                return Satisfiable(cnf);
-            }
-
-            variable = FindUnassigned(cnf);
-            if (variable != null)   // If we have found a unassigned variable, we are at the decision (branching) point
-            {
-                return Branch(cnf, variable);
-            }
-            else
-            {
-                return new DPLLResultHolder(false, null);   // Otherwise no unassigned variable exist and we did not return SAT yet -> UNSAT
-            }
+            return new DPLLResultHolder(false, null);
         }
 
-        // Branch method that tries to assign a variable and solve the CNF recursively
-        // If the assignment failed, try the other assignment value.
-        private DPLLResultHolder Branch (CNF cnf, Variable variable)
+        // Branch method that creates new CNF formula, sets a variable in the original formula to false
+        // and sets the variable in the new formula to true and pushes the new formula to the stack
+        private void Branch (Stack<CNF> stack, Variable variable)
         {
             if (!parallel)
             {
-                CNF BranchCNF = new CNF(cnf);   // Copy the CNF formula
-                variable.SetValue(cnf, true);   // Try setting the variable to true in the original CNF formula
-                DPLLResultHolder result = Satisfiable(cnf); // Try solving the original CNF formula
+                CNF branchedCNF = new CNF(stack.Peek()); // Copy the CNF formula
+                variable.SetValue(stack.Peek(), false);  // Try setting the variable to false in the original CNF formula
+                stack.Push(branchedCNF);
+                variable.SetValue(stack.Peek(), true); // Try setting the variable to true in the new CNF formula
 
-                if (result.SAT) // If SAT, we're done
-                {
-                    return result;
-                }
-                else    // Otherwise try setting the variable to false and try solving the copy of the original formula (original might have changed).
-                {
-                    variable.SetValue(BranchCNF, false);
-                    return Satisfiable(BranchCNF);
-                }
+                return; // Try solving the new CNF formula
             }
             else
             {
-                // NAIVE THREADING
-                /*CNF BranchCNF = new CNF(cnf);
-                variable.SetValue(cnf, true);
+                CNF branchedCNF = new CNF(stack.Peek()); // Copy the CNF formula
+                variable.SetValue(stack.Peek(), true);  // Try setting the variable to true in the original CNF formula
 
-                DPLLResultHolder otherThreadResult = null;
-                Thread otherThread = new Thread(() =>
-                {
-                    variable.SetValue(BranchCNF, false);
-                    otherThreadResult = Satisfiable(BranchCNF);
-                });
-                otherThread.Start();
-
-                DPLLResultHolder result = Satisfiable(cnf);
-
-                if (result.SAT)
-                {
-                    return result;
-                }
-
-                otherThread.Join();
-                
-                if (otherThreadResult.SAT)
-                {
-                    return otherThreadResult;
-                }
-
-                return new DPLLResultHolder(false, null);*/
-
-                // BETTER THREADING
-                CNF BranchCNF = new CNF(cnf);
-                variable.SetValue(cnf, true);
-                variable.SetValue(BranchCNF, false);
+                variable.SetValue(branchedCNF, false); // Try setting the variable to false in the new CNF formula
 
                 lock (sharedModelQueue)
                 {
-                    sharedModelQueue.Enqueue(BranchCNF);
+                    sharedModelQueue.Enqueue(branchedCNF);  // Enqueue and inform about new work
                     Monitor.Pulse(sharedModelQueue);
                 }
 
-                DPLLResultHolder result = Satisfiable(cnf);
-
-                if (result.SAT)
-                {
-                    return result;
-                }
-
-                return new DPLLResultHolder(false, null);
+                return; // Try solving the original CNF formula                
             }
         }
 
