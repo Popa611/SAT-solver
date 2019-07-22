@@ -70,10 +70,10 @@ namespace SAT_solver
 
                 while (true)
                 {
-                    // Skip comment lines (starting with 'c '
+                    // Skip comment lines (starting with 'c ')
                      tokens = reader.ReadLine().Split(' ', '\t');
 
-                    if (tokens[0] != "c")
+                    if (tokens[0] != "c" && tokens[0] != "")
                     {
                         break;
                     }
@@ -409,6 +409,7 @@ namespace SAT_solver
             }
         }
 
+        // Checks if a given CNF formula is SAT or not.
         public DPLLResultHolder Satisfiable(CNF cnf)
         {
             Stack<CNF> stack = new Stack<CNF>();
@@ -871,33 +872,41 @@ namespace SAT_solver
 
         public void ReadGraph(TextReader reader)
         {
-            var line = reader.ReadLine();
-            var tokens = line.Split(' ');
-
-            foreach (var token in tokens)
+            try
             {
-                Vertices.Add(new Vertex(token));
-            }
+                var line = reader.ReadLine();
+                var tokens = line.Split(' ');
 
-            if (Vertices.Count == 0)    // Empty graphs not supported
-                throw new FormatException();
-
-            while(true)
-            {
-                line = reader.ReadLine();
-                
-                if (line == "")
+                foreach (var token in tokens)
                 {
-                    break;
+                    Vertices.Add(new Vertex(token));
                 }
 
-                tokens = line.Split(' ');
+                if (Vertices.Count == 0)    // Empty graphs not supported
+                    throw new FormatException();
 
-                var vertex1 = GetVertexById(tokens[0]);
-                var vertex2 = GetVertexById(tokens[1]);
+                while (true)
+                {
+                    line = reader.ReadLine();
 
-                vertex1.AddNeighbour(vertex2);
-                vertex2.AddNeighbour(vertex1);
+                    if (line == "")
+                    {
+                        break;
+                    }
+
+                    tokens = line.Split(' ');
+
+                    var vertex1 = GetVertexById(tokens[0]);
+                    var vertex2 = GetVertexById(tokens[1]);
+
+                    vertex1.AddNeighbour(vertex2);
+                    vertex2.AddNeighbour(vertex1);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ex is IndexOutOfRangeException || ex is NullReferenceException)
+                    throw new FormatException();
             }
         }
 
@@ -934,33 +943,95 @@ namespace SAT_solver
 
     class Program
     {
-        static void PrintUsage()
+        static void PrintSATSolverUsage()
         {
-            Console.WriteLine("-----------------------------------------HELP---------------------------------------");
-            Console.WriteLine("First line of input is \"cnf number_of_variables number_of_clauses\"");
-            Console.WriteLine("Then number_of_clauses lines follow which consist of integers separated by space.");
+            Console.WriteLine("-----------------------------------------SAT solver help-----------------------------------------");
+            Console.WriteLine("Comment lines start with \"c \" ");
+            Console.WriteLine("First line of input is \"p cnf number_of_variables number_of_clauses\".");
+            Console.WriteLine("Then clause lines follow. It is recommended that clause is composed of integers starting at 1 " +
+                "(Strings are possible if \"c\" string is not used as a variable.");
+            Console.WriteLine("Each clause must end with 0 (zero).");
             Console.WriteLine("Each integer acts as a variable. Negative integer is negation of the variable.");
-            Console.WriteLine("Each line is one clause.");
             Console.WriteLine();
             Console.WriteLine("Input format example: ");
-            Console.WriteLine("cnf 3 2");
-            Console.WriteLine("-1 2 3");
-            Console.WriteLine("2 -3");
-            Console.WriteLine("------------------------------------------------------------------------------------");
+            Console.WriteLine("c Ignored comment.");
+            Console.WriteLine("p cnf 3 2");
+            Console.WriteLine("-1 2 3 0");
+            Console.WriteLine("2 -3 0");
+            Console.WriteLine("-------------------------------------------------------------------------------------------------");
+        }
+
+        static void PrintIndependentSetUsage()
+        {
+            Console.WriteLine("----------------------------------Independent set problem help----------------------------------");
+            Console.WriteLine("First line must be a positive integer which determines the minimum cardinality of the independent set to be found.");
+            Console.WriteLine("Next line are integeres separated by a space which are vertices numbered from 1.");
+            Console.WriteLine("Next lines are edges in the form \"first_vertex second_vertex\" (no need to add it also vice versa).");
+            Console.WriteLine("An empty line means end of the input.");
+            Console.WriteLine();
+            Console.WriteLine("Input format example: ");
+            Console.WriteLine("2");
+            Console.WriteLine("1 2 3");
+            Console.WriteLine("1 2");
+            Console.WriteLine("1 3");
+            Console.WriteLine("------------------------------------------------------------------------------------------------");
         }
 
         static void Main(string[] args)
         {
-            PrintUsage();
-            CNF cnf = new CNF();
-            IndependentSetProblem independentSetProblem = new IndependentSetProblem();
-
             while (true)
             {
                 try
                 {
-                    cnf.ReadFormula(Console.In);
-                    //independentSetProblem.ReadInput(Console.In);
+                    Console.WriteLine("Exit program (0), SAT solver (1), Independent set problem (2)");
+                    Console.Write("Choose a problem (number): ");
+                    int problemNumber = Convert.ToInt32(Console.ReadLine());
+
+                    switch(problemNumber)
+                    {
+                        case 1:
+                            PrintSATSolverUsage();
+
+                            CNF cnf = new CNF();
+                            cnf.ReadFormula(Console.In);
+
+                            CNF cnfCopy = new CNF(cnf);
+
+                            DPLL sequentialDPLL = new DPLL();
+                            DPLLResultHolder sequentialResult = sequentialDPLL.Satisfiable(cnf);
+                            Console.WriteLine();
+                            Console.WriteLine(sequentialResult);
+
+                            DPLL parallelDPLL = new DPLL();
+                            DPLLResultHolder parallelResult = parallelDPLL.SatisfiableParallel(cnfCopy);
+                            Console.WriteLine();
+                            Console.WriteLine(parallelResult);
+
+                            break;
+
+                        case 2:
+                            PrintIndependentSetUsage();
+
+                            IndependentSetProblem independentSetProblem = new IndependentSetProblem();
+                            independentSetProblem.ReadInput(Console.In);
+
+                            var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
+
+                            DPLL independentSetProblemDPLL = new DPLL();
+                            DPLLResultHolder independentSetProblemDPLLResult = independentSetProblemDPLL.Satisfiable(independentSetProblemCNF);
+                            Console.WriteLine();
+                            Console.WriteLine(independentSetProblemDPLLResult);
+
+                            CNF independentSetProblemCNFCopy = new CNF(independentSetProblemCNF);
+
+                            DPLL independentSetProblemDPLLParallel = new DPLL();
+                            DPLLResultHolder independentSetProblemDPLLResultParallel = independentSetProblemDPLLParallel.SatisfiableParallel(independentSetProblemCNFCopy);
+                            Console.WriteLine();
+                            Console.WriteLine(independentSetProblemDPLLResultParallel);
+
+                            break;
+                    }
+
                     break;
                 }
                 catch (FormatException)
@@ -968,51 +1039,8 @@ namespace SAT_solver
                     Console.WriteLine();
                     Console.WriteLine("Invalid input format!");
                     Console.WriteLine();
-                    PrintUsage();
                 }
             }
-
-            //var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
-
-            //Console.WriteLine(independentSetProblemCNF.GetInputFormat());
-
-            /*DPLL independentSetProblemDPLL = new DPLL();
-            DPLLResultHolder independentSetProblemDPLLResult = independentSetProblemDPLL.Satisfiable(independentSetProblemCNF);
-            Console.WriteLine();
-            Console.WriteLine(independentSetProblemDPLLResult);
-
-            CNF independentSetProblemCNFCopy = new CNF(independentSetProblemCNF);
-
-            DPLL independentSetProblemDPLLParallel = new DPLL();
-            DPLLResultHolder independentSetProblemDPLLResultParallel = independentSetProblemDPLLParallel.SatisfiableParallel(independentSetProblemCNFCopy);
-            Console.WriteLine();
-            Console.WriteLine(independentSetProblemDPLLResultParallel);*/
-
-            CNF cnfCopy = new CNF(cnf);
-
-            Stopwatch stopwatch = new Stopwatch();
-
-            DPLL sequentialDPLL = new DPLL();
-            stopwatch.Start();
-            DPLLResultHolder sequentialResult = sequentialDPLL.Satisfiable(cnf);
-            stopwatch.Stop();
-            Console.WriteLine();
-            Console.WriteLine(sequentialResult);
-
-            var seq = stopwatch.Elapsed;
-            stopwatch.Reset();
-
-            DPLL parallelDPLL = new DPLL();
-            stopwatch.Start();
-            DPLLResultHolder parallelResult = parallelDPLL.SatisfiableParallel(cnfCopy);
-            stopwatch.Stop();
-            Console.WriteLine();
-            Console.WriteLine(parallelResult);
-
-            Console.WriteLine("Sequential: {0}", seq);
-            Console.WriteLine("Parallel: {0}", stopwatch.Elapsed);
-
-
         }
     }
 }
