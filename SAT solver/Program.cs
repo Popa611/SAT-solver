@@ -200,6 +200,14 @@ namespace SAT_solver
 
             StringBuilder stringBuilder = new StringBuilder();
 
+            Variables.Sort((x, y) =>
+            {
+                if (x.Name[0] != 'X' && y.Name[0] != 'X')
+                    return Convert.ToInt32(x.Name).CompareTo(Convert.ToInt32(y.Name));
+                else
+                    return x.Name.CompareTo(y.Name);
+            });
+
             foreach (var variable in Variables)
             {
                 stringBuilder.Append(String.Format("{0}: {1}\n", variable.Name, variable.Value));
@@ -974,6 +982,7 @@ namespace SAT_solver
             Console.WriteLine("1 2 3");
             Console.WriteLine("1 2");
             Console.WriteLine("1 3");
+            Console.WriteLine("");
             Console.WriteLine("------------------------------------------------------------------------------------------------");
         }
 
@@ -989,7 +998,7 @@ namespace SAT_solver
 
                     switch(problemNumber)
                     {
-                        case 1:
+                        case 1: // SAT solver
                             PrintSATSolverUsage();
 
                             CNF cnf = new CNF();
@@ -1009,7 +1018,7 @@ namespace SAT_solver
 
                             break;
 
-                        case 2:
+                        case 2: // Independent set problem
                             PrintIndependentSetUsage();
 
                             IndependentSetProblem independentSetProblem = new IndependentSetProblem();
@@ -1029,6 +1038,9 @@ namespace SAT_solver
                             Console.WriteLine();
                             Console.WriteLine(independentSetProblemDPLLResultParallel);
 
+                            break;
+
+                        default:    // Everything else will exit the program
                             break;
                     }
 
