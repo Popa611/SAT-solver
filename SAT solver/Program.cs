@@ -3,17 +3,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
+[assembly: InternalsVisibleTo("SAT solver benchmark")]
+
 namespace SAT_solver
 {
     // Class representing the CNF formula
-    class CNF
+    public class CNF
     {
-        public List<Clause> Clauses { get; private set; } // List of all clauses (each connected with conjuction)
-        public List<Variable> Variables { get; private set; }   // List of all unique variables
+        internal List<Clause> Clauses { get; private set; } // List of all clauses (each connected with conjuction)
+        internal List<Variable> Variables { get; private set; }   // List of all unique variables
         private int NumberOfVariables { get; set; } // Number of unique variables
         private int NumberOfClauses { get; set; }   // Number of clauses
 
@@ -23,7 +26,7 @@ namespace SAT_solver
             Variables = new List<Variable>();
         }
 
-        public CNF(List<Clause> Clauses)
+        internal CNF(List<Clause> Clauses)
         {
             this.Clauses = Clauses;
             Variables = GetUniqueVariables();
@@ -138,11 +141,15 @@ namespace SAT_solver
                 {
                     throw new FormatException();
                 }
+                else
+                {
+                    throw ex;
+                }
             }
         }
 
         // Returns a list with all variables in the CNF formula
-        public List<Variable> GetVariables()
+        internal List<Variable> GetVariables()
         {
             List<Variable> res = new List<Variable>();
 
@@ -158,7 +165,7 @@ namespace SAT_solver
         }
 
         // Gets list of unique variables
-        public List<Variable> GetUniqueVariables()
+        internal List<Variable> GetUniqueVariables()
         {
             List<Variable> uniqueVariables = new List<Variable>();
             bool added;
@@ -202,10 +209,35 @@ namespace SAT_solver
 
             Variables.Sort((x, y) =>
             {
-                if (x.Name[0] != 'X' && y.Name[0] != 'X')
+                bool xContainsLetter = false;
+                bool yContainsLetter = false;
+
+                foreach (var c in x.Name)
+                {
+                    if (char.IsLetter(c))
+                    {
+                        xContainsLetter = true;
+                        break;
+                    }
+                }
+
+                foreach (var c in y.Name)
+                {
+                    if (char.IsLetter(c))
+                    {
+                        yContainsLetter = true;
+                        break;
+                    }
+                }
+
+                if (!xContainsLetter && !yContainsLetter)
+                {
                     return Convert.ToInt32(x.Name).CompareTo(Convert.ToInt32(y.Name));
+                }
                 else
+                {
                     return x.Name.CompareTo(y.Name);
+                }
             });
 
             foreach (var variable in Variables)
@@ -253,7 +285,7 @@ namespace SAT_solver
     }
 
     // Class representing one clause in the CNF formula
-    class Clause
+    internal class Clause
     {
         public List<Variable> Variables { get; private set; } // List of all variables in the clause
 
@@ -308,7 +340,7 @@ namespace SAT_solver
     }
 
     // Class representing a single variable in a clause of a CNF formula
-    class Variable
+    internal class Variable
     {
         public bool Sign { get; set; }  // Either positive or negative literal
         public bool Value { get; set; } // Assigned value of the variable
@@ -374,7 +406,7 @@ namespace SAT_solver
     }
 
     // Class representing the DPLL algorithm with its methods and functions.
-    class DPLL
+    public class DPLL
     {
         private static Queue<CNF> sharedModelQueue = new Queue<CNF>();    // Queue of work that should be done by other threads (which is shared among them)
 
@@ -487,9 +519,9 @@ namespace SAT_solver
             else
             {
                 CNF branchedCNF = new CNF(stack.Peek()); // Copy the CNF formula
-                variable.SetValue(stack.Peek(), true);  // Try setting the variable to true in the original CNF formula
+                variable.SetValue(stack.Peek(), false);  // Try setting the variable to false in the original CNF formula
 
-                variable.SetValue(branchedCNF, false); // Try setting the variable to false in the new CNF formula
+                variable.SetValue(branchedCNF, true); // Try setting the variable to true in the new CNF formula
 
                 lock (sharedModelQueue)
                 {
@@ -640,7 +672,7 @@ namespace SAT_solver
     }
 
     // Holds the result of satisfiability problem.
-    class DPLLResultHolder
+    public class DPLLResultHolder
     {
         public bool SAT { get; set; }  // True if a CNF is satisfiable. Otherwise false.
         public CNF Model { get; set; } // Holds the model of the CNF if CNF is satisfiable. If SAT is false, it should not be read (set to null preferably)
@@ -664,7 +696,7 @@ namespace SAT_solver
         }
     }
 
-    class SolverThread
+    internal class SolverThread
     {
         private Thread thread { get; set; } // Reference to a thread to be run
 
@@ -765,7 +797,7 @@ namespace SAT_solver
         }
     }
 
-    class IdleThreadsCounter
+    internal class IdleThreadsCounter
     {
         public long Counter;    // Counts the number of idle threads
 
@@ -775,11 +807,11 @@ namespace SAT_solver
         }
     }
 
-    class IndependentSetProblem
+    public class IndependentSetProblem
     {
-        public Graph Graph = new Graph();
+        internal Graph Graph = new Graph();
 
-        public int K { get; set; }  // Does an independent set of size atleast K in a graph exist?
+        internal int K { get; set; }  // Does an independent set of size atleast K in a graph exist?
 
         public void ReadInput(TextReader reader)
         {
@@ -867,9 +899,43 @@ namespace SAT_solver
 
             return new CNF(clauses);
         }
+
+        public string InterpretDPLLResult(DPLLResultHolder result)
+        {
+            if (result != null)
+            {
+                if (!result.SAT)
+                {
+                    return "Such independent set does not exist.";
+                }
+
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.Append(String.Format("The following vertices can be chosen for the independent set of size atleast {0}:\n", K));
+
+                result.Model.Variables.Sort((x, y) =>
+                {
+                    if (x.Name[0] != 'X' && y.Name[0] != 'X')
+                        return Convert.ToInt32(x.Name).CompareTo(Convert.ToInt32(y.Name));
+                    else
+                        return x.Name.CompareTo(y.Name);
+                });
+
+                foreach (var variable in result.Model.Variables)
+                {
+                    if (!variable.Name.Contains('X') && variable.Value) // Helper variables start with 'X'
+                    {
+                        stringBuilder.Append(String.Format("{0}\n", variable.Name));
+                    }
+                }
+
+                return stringBuilder.ToString();
+            }
+
+            return null;
+        }
     }
 
-    class Graph
+    internal class Graph
     {
         public List<Vertex> Vertices;
 
@@ -887,6 +953,7 @@ namespace SAT_solver
 
                 foreach (var token in tokens)
                 {
+                    Convert.ToInt32(token); // Only numbers allowed (otherwise exception is thrown and caught)
                     Vertices.Add(new Vertex(token));
                 }
 
@@ -913,8 +980,14 @@ namespace SAT_solver
             }
             catch (Exception ex)
             {
-                if (ex is IndexOutOfRangeException || ex is NullReferenceException)
+                if (ex is IndexOutOfRangeException || ex is NullReferenceException || ex is FormatException)
+                {
                     throw new FormatException();
+                }
+                else
+                {
+                    throw ex;
+                }
             }
         }
 
@@ -932,7 +1005,7 @@ namespace SAT_solver
         }
     }
 
-    class Vertex
+    internal class Vertex
     {
         public string Id { get; set; }
         public List<Vertex> Neighbours;
@@ -1006,11 +1079,13 @@ namespace SAT_solver
 
                             CNF cnfCopy = new CNF(cnf);
 
+                            // Sequential solution
                             DPLL sequentialDPLL = new DPLL();
                             DPLLResultHolder sequentialResult = sequentialDPLL.Satisfiable(cnf);
                             Console.WriteLine();
                             Console.WriteLine(sequentialResult);
 
+                            // Parallel solution
                             DPLL parallelDPLL = new DPLL();
                             DPLLResultHolder parallelResult = parallelDPLL.SatisfiableParallel(cnfCopy);
                             Console.WriteLine();
@@ -1026,17 +1101,19 @@ namespace SAT_solver
 
                             var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
 
+                            CNF independentSetProblemCNFCopy = new CNF(independentSetProblemCNF);
+
+                            // Sequential solution
                             DPLL independentSetProblemDPLL = new DPLL();
                             DPLLResultHolder independentSetProblemDPLLResult = independentSetProblemDPLL.Satisfiable(independentSetProblemCNF);
                             Console.WriteLine();
-                            Console.WriteLine(independentSetProblemDPLLResult);
-
-                            CNF independentSetProblemCNFCopy = new CNF(independentSetProblemCNF);
-
+                            Console.WriteLine(independentSetProblem.InterpretDPLLResult(independentSetProblemDPLLResult));
+                            
+                            // Parallel solution
                             DPLL independentSetProblemDPLLParallel = new DPLL();
                             DPLLResultHolder independentSetProblemDPLLResultParallel = independentSetProblemDPLLParallel.SatisfiableParallel(independentSetProblemCNFCopy);
                             Console.WriteLine();
-                            Console.WriteLine(independentSetProblemDPLLResultParallel);
+                            Console.WriteLine(independentSetProblem.InterpretDPLLResult(independentSetProblemDPLLResultParallel));
 
                             break;
 
