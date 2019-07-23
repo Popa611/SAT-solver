@@ -248,6 +248,7 @@ namespace SAT_solver
             return stringBuilder.ToString();
         }
 
+        // Returns a possible original input in the DIMACS format
         public string GetInputFormat()
         {
             StringBuilder stringBuilder = new StringBuilder();
@@ -258,6 +259,7 @@ namespace SAT_solver
 
             Dictionary<string, int> X = new Dictionary<string, int>();
 
+            // Assign a number to each variable
             foreach (var variable in Variables)
             {
                 X[variable.Name] = nameCounter++;
@@ -504,7 +506,7 @@ namespace SAT_solver
         }
 
         // Branch method that creates new CNF formula, sets a variable in the original formula to false
-        // and sets the variable in the new formula to true and pushes the new formula to the stack
+        // and sets the variable in the new formula to true and pushes the new formula to the stack (or enqueues it to shared queue in case of parallelism)
         private void Branch (Stack<CNF> stack, Variable variable)
         {
             if (!parallel)
@@ -518,10 +520,10 @@ namespace SAT_solver
             }
             else
             {
-                CNF branchedCNF = new CNF(stack.Peek()); // Copy the CNF formula
-                variable.SetValue(stack.Peek(), false);  // Try setting the variable to false in the original CNF formula
+                CNF branchedCNF = new CNF(stack.Peek());
+                variable.SetValue(stack.Peek(), false);
 
-                variable.SetValue(branchedCNF, true); // Try setting the variable to true in the new CNF formula
+                variable.SetValue(branchedCNF, true);
 
                 lock (sharedModelQueue)
                 {
@@ -529,7 +531,7 @@ namespace SAT_solver
                     Monitor.Pulse(sharedModelQueue);
                 }
 
-                return; // Try solving the original CNF formula                
+                return;             
             }
         }
 
@@ -900,6 +902,7 @@ namespace SAT_solver
             return new CNF(clauses);
         }
 
+        // Returns a string explaining the result of the DPLL algorithm
         public string InterpretDPLLResult(DPLLResultHolder result)
         {
             if (result != null)
@@ -922,7 +925,7 @@ namespace SAT_solver
 
                 foreach (var variable in result.Model.Variables)
                 {
-                    if (!variable.Name.Contains('X') && variable.Value) // Helper variables start with 'X'
+                    if (!variable.Name.Contains('X') && variable.Value) // Helper variables start with 'X', we do not want to output them
                     {
                         stringBuilder.Append(String.Format("{0}\n", variable.Name));
                     }
@@ -1022,6 +1025,42 @@ namespace SAT_solver
         }
     }
 
+    public class ThreeColorabilityProblem
+    {
+        internal Graph graph = new Graph();
+
+        public void ReadInput(TextReader textReader)
+        {
+            graph.ReadGraph(textReader);
+        }
+
+        public CNF ConvertToCNF()
+        {
+            List<Clause> clauses = new List<Clause>();
+
+            foreach (var vertex in graph.Vertices)
+            {
+                clauses.Add(new Clause(new List<Variable>   // Vertex has either of 3 colors
+                { new Variable(true, vertex.Id+"Red"), new Variable(true, vertex.Id+"Green"), new Variable(true, vertex.Id+"Blue") }));
+
+                // Vertex cannot have 2 colours at the same time
+                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id+"Red"), new Variable(false, vertex.Id+"Green") }));
+                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "Red"), new Variable(false, vertex.Id + "Blue") }));
+                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "Green"), new Variable(false, vertex.Id + "Blue") }));
+
+                // Vertices sharing an edge cannot have the same colour
+                foreach (var neighbour in vertex.Neighbours)
+                {
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id+"Red"), new Variable(false, neighbour.Id+"Red") }));
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "Green"), new Variable(false, neighbour.Id + "Green") }));
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "Blue"), new Variable(false, neighbour.Id + "Blue") }));
+                }
+            }
+
+            return new CNF(clauses);
+        }
+    }
+
     class Program
     {
         static void PrintSATSolverUsage()
@@ -1059,13 +1098,28 @@ namespace SAT_solver
             Console.WriteLine("------------------------------------------------------------------------------------------------");
         }
 
+        static void PrintThreeColorabilityUsage()
+        {
+            Console.WriteLine("----------------------------------3-Colorability problem help-----------------------------------");
+            Console.WriteLine("First line are integeres separated by a space which are vertices numbered from 1.");
+            Console.WriteLine("Next lines are edges in the form \"first_vertex second_vertex\" (no need to add it also vice versa).");
+            Console.WriteLine("An empty line means end of the input.");
+            Console.WriteLine();
+            Console.WriteLine("Input format example: ");
+            Console.WriteLine("1 2 3");
+            Console.WriteLine("1 2");
+            Console.WriteLine("1 3");
+            Console.WriteLine("");
+            Console.WriteLine("------------------------------------------------------------------------------------------------");
+        }
+
         static void Main(string[] args)
         {
             while (true)
             {
                 try
                 {
-                    Console.WriteLine("Exit program (0), SAT solver (1), Independent set problem (2)");
+                    Console.WriteLine("Exit program (0), SAT solver (1), Independent set problem (2), 3-Colorability problem (3)");
                     Console.Write("Choose a problem (number): ");
                     int problemNumber = Convert.ToInt32(Console.ReadLine());
 
@@ -1099,21 +1153,27 @@ namespace SAT_solver
                             IndependentSetProblem independentSetProblem = new IndependentSetProblem();
                             independentSetProblem.ReadInput(Console.In);
 
-                            var independentSetProblemCNF = independentSetProblem.ConvertToCNF();
+                            CNF independentSetProblemCNF = independentSetProblem.ConvertToCNF();
 
-                            CNF independentSetProblemCNFCopy = new CNF(independentSetProblemCNF);
-
-                            // Sequential solution
-                            DPLL independentSetProblemDPLL = new DPLL();
-                            DPLLResultHolder independentSetProblemDPLLResult = independentSetProblemDPLL.Satisfiable(independentSetProblemCNF);
-                            Console.WriteLine();
-                            Console.WriteLine(independentSetProblem.InterpretDPLLResult(independentSetProblemDPLLResult));
-                            
-                            // Parallel solution
                             DPLL independentSetProblemDPLLParallel = new DPLL();
-                            DPLLResultHolder independentSetProblemDPLLResultParallel = independentSetProblemDPLLParallel.SatisfiableParallel(independentSetProblemCNFCopy);
+                            DPLLResultHolder independentSetProblemDPLLResultParallel = independentSetProblemDPLLParallel.SatisfiableParallel(independentSetProblemCNF);
                             Console.WriteLine();
                             Console.WriteLine(independentSetProblem.InterpretDPLLResult(independentSetProblemDPLLResultParallel));
+
+                            break;
+
+                        case 3: // 3-Colorability problem
+                            PrintThreeColorabilityUsage();
+
+                            ThreeColorabilityProblem threeColorabilityProblem = new ThreeColorabilityProblem();
+                            threeColorabilityProblem.ReadInput(Console.In);
+
+                            CNF threeColorabilityProblemCNF = threeColorabilityProblem.ConvertToCNF();
+
+                            DPLL threeColorabilityProblemDPLLParallel = new DPLL();
+                            DPLLResultHolder threeColorabilityProblemDPLLResultParallel = threeColorabilityProblemDPLLParallel.SatisfiableParallel(threeColorabilityProblemCNF);
+                            Console.WriteLine();
+                            Console.WriteLine(threeColorabilityProblemDPLLResultParallel);
 
                             break;
 
