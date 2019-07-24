@@ -956,7 +956,7 @@ namespace SAT_solver
 
                 foreach (var token in tokens)
                 {
-                    Convert.ToInt32(token); // Only numbers allowed (otherwise exception is thrown and caught)
+                    Convert.ToInt32(token); // Only numbers allowed (otherwise exception is thrown)
                     Vertices.Add(new Vertex(token));
                 }
 
