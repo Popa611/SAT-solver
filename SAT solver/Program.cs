@@ -1041,23 +1041,153 @@ namespace SAT_solver
             foreach (var vertex in graph.Vertices)
             {
                 clauses.Add(new Clause(new List<Variable>   // Vertex has either of 3 colors
-                { new Variable(true, vertex.Id+"Red"), new Variable(true, vertex.Id+"Green"), new Variable(true, vertex.Id+"Blue") }));
+                { new Variable(true, vertex.Id+"-Red"), new Variable(true, vertex.Id+"-Green"), new Variable(true, vertex.Id+"-Blue") }));
 
                 // Vertex cannot have 2 colours at the same time
-                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id+"Red"), new Variable(false, vertex.Id+"Green") }));
-                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "Red"), new Variable(false, vertex.Id + "Blue") }));
-                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "Green"), new Variable(false, vertex.Id + "Blue") }));
+                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id+"-Red"), new Variable(false, vertex.Id+"-Green") }));
+                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Red"), new Variable(false, vertex.Id + "-Blue") }));
+                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Green"), new Variable(false, vertex.Id + "-Blue") }));
 
                 // Vertices sharing an edge cannot have the same colour
                 foreach (var neighbour in vertex.Neighbours)
                 {
-                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id+"Red"), new Variable(false, neighbour.Id+"Red") }));
-                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "Green"), new Variable(false, neighbour.Id + "Green") }));
-                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "Blue"), new Variable(false, neighbour.Id + "Blue") }));
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id+"-Red"), new Variable(false, neighbour.Id+"-Red") }));
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Green"), new Variable(false, neighbour.Id + "-Green") }));
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Blue"), new Variable(false, neighbour.Id + "-Blue") }));
                 }
             }
 
             return new CNF(clauses);
+        }
+
+        public string InterpretDPLLResult(DPLLResultHolder result)
+        {
+            if (result != null)
+            {
+                if (!result.SAT)
+                {
+                    return "Not 3-colorable.";
+                }
+
+                result.Model.Variables.Sort((x, y) => x.Name.CompareTo(y.Name));
+
+                StringBuilder stringBuilder = new StringBuilder();
+
+                foreach (var variable in result.Model.Variables)
+                {
+                    if (variable.Value)
+                    {
+                        string[] tokens = variable.Name.Split('-');
+
+                        if (tokens.Length != 2) // The "result" is not a result of 3-colorability problem converted to SAT problem
+                            throw new ArgumentException();
+
+                        stringBuilder.Append(String.Format("{0} is {1}\n", tokens[0], tokens[1]));
+                    }
+                }
+
+                return stringBuilder.ToString();
+            }
+
+            return null;
+        }
+    }
+
+    public class HamiltonianPathProblem
+    {
+        internal Graph graph = new Graph();
+
+        public void ReadInput(TextReader textReader)
+        {
+            graph.ReadGraph(textReader);
+        }
+
+        public CNF ConvertToCNF()
+        {
+            List<Clause> clauses = new List<Clause>();
+
+            // X_i_j means that vertex j is on the i-th position of the path
+
+            for (int i = 1; i <= graph.Vertices.Count; i++)
+            {
+                List<Variable> mustAppearList = new List<Variable>();
+                List<Variable> posMustBeOccupied = new List<Variable>();
+
+                for (int j = 1; j <= graph.Vertices.Count; j++)
+                {
+                    // Each vertex must appear in the path (X1j || X2j || ...)
+                    mustAppearList.Add(new Variable(true, "X-" + j.ToString() + "-" + i.ToString()));
+
+                    // Every position on the path must be occupied (Xi1 || Xi2 || ...)
+                    posMustBeOccupied.Add(new Variable(true, "X-" + i.ToString() + "-" + j.ToString()));
+
+                    Variable Xij = new Variable(false, "X-" + i.ToString() + "-" + j.ToString());
+
+                    for (int k = 1; k <= graph.Vertices.Count; k++)
+                    {
+                        // No vertex can appear twice in the path (!Xij || !Xkj)
+                        if (i != k)
+                            clauses.Add(new Clause(new List<Variable> { Xij, new Variable(false, "X-" + k.ToString() + "-" + j.ToString()) }));
+
+                        // No two vertices occupy same position in the path (!Xij || !Xik)
+                        if (j != k)
+                            clauses.Add(new Clause(new List<Variable> { Xij, new Variable(false, "X-" + i.ToString() + "-" + k.ToString()) }));
+                    }
+                }
+
+                clauses.Add(new Clause(mustAppearList));
+                clauses.Add(new Clause(posMustBeOccupied));
+            }
+
+            // Nonadjacent nodes cannot be adjacent in the path
+            for (int i = 1; i <= graph.Vertices.Count; i++)
+            {
+                for (int j = 1; j <= graph.Vertices.Count; j++)
+                {
+                    if (graph.Vertices[i-1].Neighbours.Contains(graph.Vertices[j-1]))
+                        continue;
+
+                    for (int k = 1; k <= graph.Vertices.Count-1; k++)
+                    {
+                        clauses.Add(new Clause(new List<Variable>
+                        { new Variable(false, "X-"+k.ToString() + "-" + i.ToString()), new Variable(false, "X-"+(k+1).ToString() + "-" + j.ToString())}));
+                    }
+                }
+            }
+
+            return new CNF(clauses);
+        }
+
+        public string InterpretDPLLResult(DPLLResultHolder result)
+        {
+            if (result != null)
+            {
+                if (!result.SAT)
+                {
+                    return "No hamiltonian path exist.";
+                }
+
+                result.Model.Variables.Sort((x, y) => x.Name.CompareTo(y.Name));
+
+                StringBuilder stringBuilder = new StringBuilder();
+
+                foreach (var variable in result.Model.Variables)
+                {
+                    if (variable.Value)
+                    {
+                        string[] tokens = variable.Name.Split('-');
+
+                        if (tokens.Length != 3) // The "result" is not a result of hamiltonian path problem converted to SAT problem
+                            throw new ArgumentException();
+
+                        stringBuilder.Append(String.Format("{0}. position is vertex {1}\n", tokens[1], tokens[2]));
+                    }
+                }
+
+                return stringBuilder.ToString();
+            }
+
+            return null;
         }
     }
 
@@ -1085,32 +1215,36 @@ namespace SAT_solver
         {
             Console.WriteLine("----------------------------------Independent set problem help----------------------------------");
             Console.WriteLine("First line must be a positive integer which determines the minimum cardinality of the independent set to be found.");
-            Console.WriteLine("Next line are integeres separated by a space which are vertices numbered from 1.");
-            Console.WriteLine("Next lines are edges in the form \"first_vertex second_vertex\" (no need to add it also vice versa).");
-            Console.WriteLine("An empty line means end of the input.");
-            Console.WriteLine();
-            Console.WriteLine("Input format example: ");
-            Console.WriteLine("2");
-            Console.WriteLine("1 2 3");
-            Console.WriteLine("1 2");
-            Console.WriteLine("1 3");
-            Console.WriteLine("");
+            Console.WriteLine("Next the graph is to be input in the following format:");
+            PrintGraphInputHelp();
             Console.WriteLine("------------------------------------------------------------------------------------------------");
         }
 
-        static void PrintThreeColorabilityUsage()
+        static void Print3ColorabilityUsage()
         {
             Console.WriteLine("----------------------------------3-Colorability problem help-----------------------------------");
+            PrintGraphInputHelp();
+            Console.WriteLine("------------------------------------------------------------------------------------------------");
+        }
+
+        static void PrintHamiltonianPathUsage()
+        {
+            Console.WriteLine("----------------------------------Hamiltonian path problem help-----------------------------------");
+            PrintGraphInputHelp();
+            Console.WriteLine("--------------------------------------------------------------------------------------------------");
+        }
+
+        static void PrintGraphInputHelp()
+        {
             Console.WriteLine("First line are integeres separated by a space which are vertices numbered from 1.");
             Console.WriteLine("Next lines are edges in the form \"first_vertex second_vertex\" (no need to add it also vice versa).");
             Console.WriteLine("An empty line means end of the input.");
             Console.WriteLine();
-            Console.WriteLine("Input format example: ");
+            Console.WriteLine("Graph input format example: ");
             Console.WriteLine("1 2 3");
             Console.WriteLine("1 2");
             Console.WriteLine("1 3");
             Console.WriteLine("");
-            Console.WriteLine("------------------------------------------------------------------------------------------------");
         }
 
         static void Main(string[] args)
@@ -1119,8 +1253,8 @@ namespace SAT_solver
             {
                 try
                 {
-                    Console.WriteLine("Exit program (0), SAT solver (1), Independent set problem (2), 3-Colorability problem (3)");
-                    Console.Write("Choose a problem (number): ");
+                    Console.WriteLine("Exit program (0), SAT solver (1), Independent set problem (2), 3-Colorability problem (3), Hamiltonian path problem (4)");
+                    Console.Write("Choose an option (number): ");
                     int problemNumber = Convert.ToInt32(Console.ReadLine());
 
                     switch(problemNumber)
@@ -1163,7 +1297,7 @@ namespace SAT_solver
                             break;
 
                         case 3: // 3-Colorability problem
-                            PrintThreeColorabilityUsage();
+                            Print3ColorabilityUsage();
 
                             ThreeColorabilityProblem threeColorabilityProblem = new ThreeColorabilityProblem();
                             threeColorabilityProblem.ReadInput(Console.In);
@@ -1173,7 +1307,22 @@ namespace SAT_solver
                             DPLL threeColorabilityProblemDPLLParallel = new DPLL();
                             DPLLResultHolder threeColorabilityProblemDPLLResultParallel = threeColorabilityProblemDPLLParallel.SatisfiableParallel(threeColorabilityProblemCNF);
                             Console.WriteLine();
-                            Console.WriteLine(threeColorabilityProblemDPLLResultParallel);
+                            Console.WriteLine(threeColorabilityProblem.InterpretDPLLResult(threeColorabilityProblemDPLLResultParallel));
+
+                            break;
+
+                        case 4: // Hamiltonian path problem
+                            PrintHamiltonianPathUsage();
+
+                            HamiltonianPathProblem hamiltonianPathProblem = new HamiltonianPathProblem();
+                            hamiltonianPathProblem.ReadInput(Console.In);
+
+                            CNF hamiltonianPathProblemCNF = hamiltonianPathProblem.ConvertToCNF();
+
+                            DPLL hamiltonianPathProblemDPLLParallel = new DPLL();
+                            DPLLResultHolder hamiltonianPathProblemDPLLResultParallel = hamiltonianPathProblemDPLLParallel.SatisfiableParallel(hamiltonianPathProblemCNF);
+                            Console.WriteLine();
+                            Console.WriteLine(hamiltonianPathProblem.InterpretDPLLResult(hamiltonianPathProblemDPLLResultParallel));
 
                             break;
 
