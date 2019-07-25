@@ -46,7 +46,7 @@ namespace SAT_solver
 
                 foreach (var variable in clause.Variables)
                 {
-                    VarList.Add(new Variable(variable.Sign, variable.Value, variable.Assigned, variable.Name));
+                    VarList.Add(new Variable(variable.Sign, variable.Value, variable.IsAssigned, variable.Name));
                 }
 
                 ClauseList.Add(new Clause(VarList));
@@ -297,7 +297,7 @@ namespace SAT_solver
 
             foreach (var variable in variables)
             {
-                vars.Add(new Variable(variable.Sign, variable.Value, variable.Assigned, variable.Name));
+                vars.Add(new Variable(variable.Sign, variable.Value, variable.IsAssigned, variable.Name));
             }
 
             this.Variables = vars;
@@ -309,7 +309,7 @@ namespace SAT_solver
         {
             foreach (var var in Variables)
             {
-                if (var.Assigned && var.GetFinalValue())
+                if (var.IsAssigned && var.GetFinalValue())
                 {
                     return true;
                 }
@@ -323,7 +323,7 @@ namespace SAT_solver
         {
             foreach (var var in Variables)
             {
-                if (!var.Assigned)  // All variables have to be assigned
+                if (!var.IsAssigned)  // All variables have to be assigned
                 {
                     return false;
                 }
@@ -346,14 +346,14 @@ namespace SAT_solver
     {
         public bool Sign { get; set; }  // Either positive or negative literal
         public bool Value { get; set; } // Assigned value of the variable
-        public bool Assigned { get; set; }  // Indicates whether this variable has been already assigned a value
+        public bool IsAssigned { get; set; }  // Indicates whether this variable has been already assigned a value
         public string Name { get; private set; }  // Unique identifier
 
-        public Variable (bool Sign, bool Value, bool Assigned, string Name)
+        public Variable (bool Sign, bool Value, bool IsAssigned, string Name)
         {
             this.Sign = Sign;
             this.Value = Value;
-            this.Assigned = Assigned;
+            this.IsAssigned = IsAssigned;
             this.Name = Name;
         }
 
@@ -361,7 +361,7 @@ namespace SAT_solver
         {
             this.Sign = Sign;
             Value = false;
-            Assigned = false;
+            IsAssigned = false;
             this.Name = Name;
         }
 
@@ -386,22 +386,22 @@ namespace SAT_solver
                 if (variable.Name == this.Name) // All variables in the formula with the same name get assigned
                 {
                     variable.Value = Value;
-                    variable.Assigned = true;
+                    variable.IsAssigned = true;
                 }
             }
         }
 
         // Sets the Assigned property for the variable in the whole CNF formula to false.
-        public void Unassign(CNF cnf)
+        public void UnsetValue(CNF cnf)
         {
-            if (this.Assigned == false)
+            if (this.IsAssigned == false)
                 return;
 
             foreach (var variable in cnf.GetVariables())
             {
                 if (variable.Name == this.Name)
                 {
-                    variable.Assigned = false;
+                    variable.IsAssigned = false;
                 }
             }
         }
@@ -570,7 +570,7 @@ namespace SAT_solver
 
             foreach (var variable in cnf.Variables)
             {
-                if (variable.Assigned)  // If a variable is assigned we can skip it
+                if (variable.IsAssigned)  // If a variable is assigned we can skip it
                 {
                     continue;
                 }
@@ -635,16 +635,17 @@ namespace SAT_solver
                 if (!clause.IsTrue())
                 {
                     Variable ret = null;
-                    int count = clause.Variables.Count;
+                    int count = 0;
                     foreach (var variable in clause.Variables)
                     {
-                        if (variable.Assigned)
-                        {
-                            count--;
-                        }
-                        else
+                        if (!variable.IsAssigned)
                         {
                             ret = variable;
+                            count++;
+                            if (count > 1)
+                            {
+                                break;
+                            }
                         }
                     }
 
@@ -663,7 +664,7 @@ namespace SAT_solver
         {
             foreach (var variable in cnf.GetVariables())
             {
-                if (!variable.Assigned)
+                if (!variable.IsAssigned)
                 {
                     return variable;
                 }
