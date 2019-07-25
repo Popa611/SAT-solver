@@ -737,7 +737,6 @@ namespace SAT_solver
         {
             while (true)
             {
-                //DPLL parallelDPLL = new DPLL();
                 CNF model;
 
                 lock (sharedModelQueue)
