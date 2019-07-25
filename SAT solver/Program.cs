@@ -410,9 +410,9 @@ namespace SAT_solver
     // Class representing the DPLL algorithm with its methods and functions.
     public class DPLL
     {
-        private static Queue<CNF> sharedModelQueue = new Queue<CNF>();    // Queue of work that should be done by other threads (which is shared among them)
+        private Queue<CNF> sharedModelQueue = new Queue<CNF>();    // Queue of work that should be done by other threads (which is shared among them)
 
-        private static bool parallel = false;
+        private bool parallel = false;
 
         public DPLLResultHolder SatisfiableParallel(CNF cnf)
         {
@@ -430,7 +430,7 @@ namespace SAT_solver
             {
                 for (int i = 0; i < Environment.ProcessorCount; i++)
                 {
-                    threadList.Add(new SolverThread(sharedModelQueue, threadList, notWorkingThreadsCounter));
+                    threadList.Add(new SolverThread(this, sharedModelQueue, threadList, notWorkingThreadsCounter));
                 }
 
                 lock (sharedModelQueue)    // So threads start working as soon as all threads are started (they will be waiting for this to unlock)
@@ -701,6 +701,8 @@ namespace SAT_solver
 
     internal class SolverThread
     {
+        private DPLL parallelDPLL { get; }  // Reference to the DPLL class the threads will run in
+
         private Thread thread { get; set; } // Reference to a thread to be run
 
         private Queue<CNF> sharedModelQueue { get; }    // Shared queue of models to solve
@@ -711,12 +713,13 @@ namespace SAT_solver
 
         public static DPLLResultHolder SharedResult = new DPLLResultHolder(false, null);    // The result of the solving threads
 
-        public SolverThread(Queue<CNF> sharedModelQueue, List<SolverThread> threadList, IdleThreadsCounter notWorkingThreadsCounter)
+        public SolverThread(DPLL parallelDPLL, Queue<CNF> sharedModelQueue, List<SolverThread> threadList, IdleThreadsCounter notWorkingThreadsCounter)
         {
             thread = new Thread(() => ThreadWork());
             this.sharedModelQueue = sharedModelQueue;
             this.threadList = threadList;
             this.idleThreadsCounter = notWorkingThreadsCounter;
+            this.parallelDPLL = parallelDPLL;
         }
 
         public void Start()
@@ -734,7 +737,7 @@ namespace SAT_solver
         {
             while (true)
             {
-                DPLL parallelDPLL = new DPLL();
+                //DPLL parallelDPLL = new DPLL();
                 CNF model;
 
                 lock (sharedModelQueue)
