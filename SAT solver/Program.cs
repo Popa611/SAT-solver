@@ -16,22 +16,25 @@ namespace SAT_solver
     public class CNF
     {
         internal List<Clause> Clauses { get; private set; } // List of all clauses (each connected with conjuction)
-        internal List<Variable> Variables { get; private set; }   // List of all unique variables
+        internal Dictionary<string, List<Variable>> VariablesDict { get; private set; } // Key is a variable name, value is a list of variables with the same name
+                 // All variables in the list must have the same IsAssigned, Value, Name properties if a variable with the name is assigned!
+
         private int NumberOfVariables { get; set; } // Number of unique variables
         private int NumberOfClauses { get; set; }   // Number of clauses
 
         public CNF()
         {
             Clauses = new List<Clause>();
-            Variables = new List<Variable>();
+            VariablesDict = new Dictionary<string, List<Variable>>();
         }
 
         internal CNF(List<Clause> Clauses)
         {
             this.Clauses = Clauses;
-            Variables = GetUniqueVariables();
+            VariablesDict = new Dictionary<string, List<Variable>>();
+            FillVariablesDict(Clauses);
             NumberOfClauses = Clauses.Count;
-            NumberOfVariables = Variables.Count();
+            NumberOfVariables = VariablesDict.Count;
         }
 
         // Deep copy constructor
@@ -53,7 +56,8 @@ namespace SAT_solver
             }
 
             Clauses = ClauseList;
-            Variables = GetUniqueVariables();
+            VariablesDict = new Dictionary<string, List<Variable>>();
+            FillVariablesDict(Clauses);
             NumberOfVariables = cnf.NumberOfVariables;
             NumberOfClauses = cnf.NumberOfClauses;
         }
@@ -74,7 +78,7 @@ namespace SAT_solver
                 while (true)
                 {
                     // Skip comment lines (starting with 'c ')
-                     tokens = reader.ReadLine().Split(' ', '\t');
+                    tokens = reader.ReadLine().Split(' ', '\t');
 
                     if (tokens[0] != "c" && tokens[0] != "")
                     {
@@ -130,10 +134,10 @@ namespace SAT_solver
                         variables.Add(variable);
                     }
 
-                    
+
                 }
 
-                Variables = GetUniqueVariables();
+                FillVariablesDict(Clauses);
             }
             catch (Exception ex)    // Most likely the formatting was wrong.
             {
@@ -148,50 +152,24 @@ namespace SAT_solver
             }
         }
 
-        // Returns a list with all variables in the CNF formula
-        internal List<Variable> GetVariables()
+        internal void FillVariablesDict(List<Clause> clauses)
         {
-            List<Variable> res = new List<Variable>();
-
-            foreach (var clause in Clauses)
+            foreach (var clause in clauses)
             {
-                foreach (var var in clause.Variables)
+                foreach (var variable in clause.Variables)
                 {
-                    res.Add(var);
-                }
-            }
-
-            return res;
-        }
-
-        // Gets list of unique variables
-        internal List<Variable> GetUniqueVariables()
-        {
-            List<Variable> uniqueVariables = new List<Variable>();
-            bool added;
-
-            foreach (var clause in Clauses)
-            {
-                foreach (var var in clause.Variables)
-                {
-                    added = false;
-                    foreach (var uniqueVar in uniqueVariables)
+                    List<Variable> outList;
+                    if (VariablesDict.TryGetValue(variable.Name, out outList))
                     {
-                        if (uniqueVar.Name == var.Name)  // If var is already in the uniqueVariables list, do not add it
-                        {
-                            added = true;
-                            break;
-                        }
+                        outList.Add(variable);
                     }
-
-                    if (!added)
+                    else
                     {
-                        uniqueVariables.Add(var);
+                        VariablesDict.Add(variable.Name, new List<Variable>());
+                        VariablesDict[variable.Name].Add(variable);
                     }
                 }
             }
-
-            return uniqueVariables;
         }
 
         // Converts the model of CNF formula to string, e.g.:
@@ -207,12 +185,14 @@ namespace SAT_solver
 
             StringBuilder stringBuilder = new StringBuilder();
 
-            Variables.Sort((x, y) =>
+            var variableNames = VariablesDict.Keys.ToList();
+
+            variableNames.Sort((x, y) =>
             {
                 bool xContainsLetter = false;
                 bool yContainsLetter = false;
 
-                foreach (var c in x.Name)
+                foreach (var c in x)
                 {
                     if (char.IsLetter(c))
                     {
@@ -221,7 +201,7 @@ namespace SAT_solver
                     }
                 }
 
-                foreach (var c in y.Name)
+                foreach (var c in y)
                 {
                     if (char.IsLetter(c))
                     {
@@ -232,17 +212,17 @@ namespace SAT_solver
 
                 if (!xContainsLetter && !yContainsLetter)
                 {
-                    return Convert.ToInt32(x.Name).CompareTo(Convert.ToInt32(y.Name));
+                    return Convert.ToInt32(x).CompareTo(Convert.ToInt32(y));
                 }
                 else
                 {
-                    return x.Name.CompareTo(y.Name);
+                    return x.CompareTo(y);
                 }
             });
 
-            foreach (var variable in Variables)
+            foreach (var variableName in variableNames)
             {
-                stringBuilder.Append(String.Format("{0}: {1}\n", variable.Name, variable.Value));
+                stringBuilder.Append(String.Format("{0}: {1}\n", variableName, VariablesDict[variableName][0].Value));
             }
 
             return stringBuilder.ToString();
@@ -253,16 +233,16 @@ namespace SAT_solver
         {
             StringBuilder stringBuilder = new StringBuilder();
 
-            stringBuilder.Append(String.Format("p cnf {0} {1}\n", Variables.Count, Clauses.Count));
+            stringBuilder.Append(String.Format("p cnf {0} {1}\n", VariablesDict.Count, Clauses.Count));
 
             int nameCounter = 1;
 
             Dictionary<string, int> X = new Dictionary<string, int>();
 
             // Assign a number to each variable
-            foreach (var variable in Variables)
+            foreach (var pair in VariablesDict)
             {
-                X[variable.Name] = nameCounter++;
+                X[pair.Key] = nameCounter++;
             }
 
             foreach (var clause in Clauses)
@@ -349,7 +329,7 @@ namespace SAT_solver
         public bool IsAssigned { get; set; }  // Indicates whether this variable has been already assigned a value
         public string Name { get; private set; }  // Unique identifier
 
-        public Variable (bool Sign, bool Value, bool IsAssigned, string Name)
+        public Variable(bool Sign, bool Value, bool IsAssigned, string Name)
         {
             this.Sign = Sign;
             this.Value = Value;
@@ -357,7 +337,7 @@ namespace SAT_solver
             this.Name = Name;
         }
 
-        public Variable (bool Sign, string Name)
+        public Variable(bool Sign, string Name)
         {
             this.Sign = Sign;
             Value = false;
@@ -381,13 +361,10 @@ namespace SAT_solver
         // Sets the value of the variable in the CNF formula.
         public void SetValue(CNF cnf, bool Value)
         {
-            foreach (var variable in cnf.GetVariables())
+            foreach (var variable in cnf.VariablesDict[this.Name])  // All variables in the formula with the same name get assigned
             {
-                if (variable.Name == this.Name) // All variables in the formula with the same name get assigned
-                {
-                    variable.Value = Value;
-                    variable.IsAssigned = true;
-                }
+                variable.Value = Value;
+                variable.IsAssigned = true;
             }
         }
 
@@ -397,12 +374,9 @@ namespace SAT_solver
             if (this.IsAssigned == false)
                 return;
 
-            foreach (var variable in cnf.GetVariables())
+            foreach (var variable in cnf.VariablesDict[this.Name])
             {
-                if (variable.Name == this.Name)
-                {
-                    variable.IsAssigned = false;
-                }
+                variable.IsAssigned = false;
             }
         }
     }
@@ -507,7 +481,7 @@ namespace SAT_solver
 
         // Branch method that creates new CNF formula, sets a variable in the original formula to false
         // and sets the variable in the new formula to true and pushes the new formula to the stack (or enqueues it to shared queue in case of parallelism)
-        private void Branch (Stack<CNF> stack, Variable variable)
+        private void Branch(Stack<CNF> stack, Variable variable)
         {
             if (!parallel)
             {
@@ -531,7 +505,7 @@ namespace SAT_solver
                     Monitor.Pulse(sharedModelQueue);
                 }
 
-                return;             
+                return;
             }
         }
 
@@ -568,9 +542,9 @@ namespace SAT_solver
             bool IsPositive;
             bool IsNegative;
 
-            foreach (var variable in cnf.Variables)
+            foreach (var variableList in cnf.VariablesDict.Values)
             {
-                if (variable.IsAssigned)  // If a variable is assigned we can skip it
+                if (variableList[0].IsAssigned)  // If a variable is assigned we can skip it
                 {
                     continue;
                 }
@@ -583,7 +557,7 @@ namespace SAT_solver
                     {
                         foreach (var clauseVar in clause.Variables)
                         {
-                            if (clauseVar.Name == variable.Name)
+                            if (clauseVar.Name == variableList[0].Name)
                             {
                                 if (clauseVar.Sign)
                                 {
@@ -614,12 +588,12 @@ namespace SAT_solver
                 }
                 else
                 {
-                    if (IsPositive)
-                        variable.Sign = true;
-                    else
-                        variable.Sign = false;
+                    var ret = new Variable(false, variableList[0].Name);
 
-                    return variable;
+                    if (IsPositive)
+                        ret.Sign = true;
+
+                    return ret;
                 }
             }
 
@@ -662,11 +636,11 @@ namespace SAT_solver
         // Finds the first unassigned variable and returns it
         private Variable FindUnassigned(CNF cnf)
         {
-            foreach (var variable in cnf.GetVariables())
+            foreach (var pair in cnf.VariablesDict)
             {
-                if (!variable.IsAssigned)
+                if (!pair.Value[0].IsAssigned)
                 {
-                    return variable;
+                    return pair.Value[0];
                 }
             }
 
@@ -836,13 +810,13 @@ namespace SAT_solver
                     clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id), new Variable(false, neighbour.Id) }));
                 }
             }
-            
+
             // Create clauses (!X_ij || !X_kj) for i != k
             for (int i = 1; i <= K; i++)
             {
                 for (int j = 1; j <= Graph.Vertices.Count; j++)
                 {
-                    Variable X_ij = new Variable(false, "X"+i.ToString() + j.ToString());
+                    Variable X_ij = new Variable(false, "X" + i.ToString() + j.ToString());
 
                     for (int k = 1; k <= K; k++)
                     {
@@ -851,7 +825,7 @@ namespace SAT_solver
                             continue;
                         }
 
-                        Variable X_kj = new Variable(false, "X"+k.ToString() + j.ToString());
+                        Variable X_kj = new Variable(false, "X" + k.ToString() + j.ToString());
                         clauses.Add(new Clause(new List<Variable> { X_ij, X_kj }));
                     }
                 }
@@ -862,7 +836,7 @@ namespace SAT_solver
             {
                 for (int j = 1; j <= Graph.Vertices.Count; j++)
                 {
-                    Variable X_ij = new Variable(false, "X"+i.ToString() + j.ToString());
+                    Variable X_ij = new Variable(false, "X" + i.ToString() + j.ToString());
 
                     for (int k = 1; k <= Graph.Vertices.Count; k++)
                     {
@@ -871,7 +845,7 @@ namespace SAT_solver
                             continue;
                         }
 
-                        Variable X_ik = new Variable(false, "X"+i.ToString() + k.ToString());
+                        Variable X_ik = new Variable(false, "X" + i.ToString() + k.ToString());
                         clauses.Add(new Clause(new List<Variable> { X_ij, X_ik }));
                     }
                 }
@@ -884,7 +858,7 @@ namespace SAT_solver
 
                 for (int j = 1; j <= Graph.Vertices.Count; j++)
                 {
-                    variables.Add(new Variable(true, "X"+i.ToString() + j.ToString()));
+                    variables.Add(new Variable(true, "X" + i.ToString() + j.ToString()));
                 }
 
                 if (variables.Count != 0)
@@ -898,7 +872,7 @@ namespace SAT_solver
             {
                 for (int j = 1; j <= Graph.Vertices.Count; j++)
                 {
-                    clauses.Add(new Clause(new List<Variable> { new Variable(false, "X"+i.ToString() + j.ToString()), new Variable(true, j.ToString()) }));
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, "X" + i.ToString() + j.ToString()), new Variable(true, j.ToString()) }));
                 }
             }
 
@@ -918,19 +892,21 @@ namespace SAT_solver
                 StringBuilder stringBuilder = new StringBuilder();
                 stringBuilder.Append(String.Format("The following vertices can be chosen for the independent set of size atleast {0}:\n", K));
 
-                result.Model.Variables.Sort((x, y) =>
+                var variableNames = result.Model.VariablesDict.Keys.ToList();
+
+                variableNames.Sort((x, y) =>
                 {
-                    if (x.Name[0] != 'X' && y.Name[0] != 'X')
-                        return Convert.ToInt32(x.Name).CompareTo(Convert.ToInt32(y.Name));
+                    if (x[0] != 'X' && y[0] != 'X')
+                        return Convert.ToInt32(x).CompareTo(Convert.ToInt32(y));
                     else
-                        return x.Name.CompareTo(y.Name);
+                        return x.CompareTo(y);
                 });
 
-                foreach (var variable in result.Model.Variables)
+                foreach (var variableName in variableNames)
                 {
-                    if (!variable.Name.Contains('X') && variable.Value) // Helper variables start with 'X', we do not want to output them
+                    if (!variableName.Contains('X') && result.Model.VariablesDict[variableName][0].Value) // Helper variables start with 'X', we do not want to output them
                     {
-                        stringBuilder.Append(String.Format("{0}\n", variable.Name));
+                        stringBuilder.Append(String.Format("{0}\n", variableName));
                     }
                 }
 
@@ -1047,14 +1023,14 @@ namespace SAT_solver
                 { new Variable(true, vertex.Id+"-Red"), new Variable(true, vertex.Id+"-Green"), new Variable(true, vertex.Id+"-Blue") }));
 
                 // Vertex cannot have 2 colours at the same time
-                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id+"-Red"), new Variable(false, vertex.Id+"-Green") }));
+                clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Red"), new Variable(false, vertex.Id + "-Green") }));
                 clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Red"), new Variable(false, vertex.Id + "-Blue") }));
                 clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Green"), new Variable(false, vertex.Id + "-Blue") }));
 
                 // Vertices sharing an edge cannot have the same colour
                 foreach (var neighbour in vertex.Neighbours)
                 {
-                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id+"-Red"), new Variable(false, neighbour.Id+"-Red") }));
+                    clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Red"), new Variable(false, neighbour.Id + "-Red") }));
                     clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Green"), new Variable(false, neighbour.Id + "-Green") }));
                     clauses.Add(new Clause(new List<Variable> { new Variable(false, vertex.Id + "-Blue"), new Variable(false, neighbour.Id + "-Blue") }));
                 }
@@ -1072,15 +1048,17 @@ namespace SAT_solver
                     return "Not 3-colorable.";
                 }
 
-                result.Model.Variables.Sort((x, y) => x.Name.CompareTo(y.Name));
+                var variableNames = result.Model.VariablesDict.Keys.ToList();
+
+                variableNames.Sort((x, y) => x.CompareTo(y));
 
                 StringBuilder stringBuilder = new StringBuilder();
 
-                foreach (var variable in result.Model.Variables)
+                foreach (var variableName in variableNames)
                 {
-                    if (variable.Value)
+                    if (result.Model.VariablesDict[variableName][0].Value)
                     {
-                        string[] tokens = variable.Name.Split('-');
+                        string[] tokens = variableName.Split('-');
 
                         if (tokens.Length != 2) // The "result" is not a result of 3-colorability problem converted to SAT problem
                             throw new ArgumentException();
@@ -1147,10 +1125,10 @@ namespace SAT_solver
             {
                 for (int j = 1; j <= graph.Vertices.Count; j++)
                 {
-                    if (graph.Vertices[i-1].Neighbours.Contains(graph.Vertices[j-1]))
+                    if (graph.Vertices[i - 1].Neighbours.Contains(graph.Vertices[j - 1]))
                         continue;
 
-                    for (int k = 1; k <= graph.Vertices.Count-1; k++)
+                    for (int k = 1; k <= graph.Vertices.Count - 1; k++)
                     {
                         clauses.Add(new Clause(new List<Variable>
                         { new Variable(false, "X-"+k.ToString() + "-" + i.ToString()), new Variable(false, "X-"+(k+1).ToString() + "-" + j.ToString())}));
@@ -1170,15 +1148,17 @@ namespace SAT_solver
                     return "No hamiltonian path exist.";
                 }
 
-                result.Model.Variables.Sort((x, y) => x.Name.CompareTo(y.Name));
+                var variableNames = result.Model.VariablesDict.Keys.ToList();
+
+                variableNames.Sort((x, y) => x.CompareTo(y));
 
                 StringBuilder stringBuilder = new StringBuilder();
 
-                foreach (var variable in result.Model.Variables)
+                foreach (var variableName in variableNames)
                 {
-                    if (variable.Value)
+                    if (result.Model.VariablesDict[variableName][0].Value)
                     {
-                        string[] tokens = variable.Name.Split('-');
+                        string[] tokens = variableName.Split('-');
 
                         if (tokens.Length != 3) // The "result" is not a result of hamiltonian path problem converted to SAT problem
                             throw new ArgumentException();
@@ -1260,7 +1240,7 @@ namespace SAT_solver
                     Console.Write("Choose an option (number): ");
                     int problemNumber = Convert.ToInt32(Console.ReadLine());
 
-                    switch(problemNumber)
+                    switch (problemNumber)
                     {
                         case 1: // SAT solver
                             PrintSATSolverUsage();
