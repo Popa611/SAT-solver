@@ -1,16 +1,17 @@
 BenchmarkDotNet=v0.11.5, OS=Windows 10.0.17134.885 (1803/April2018Update/Redstone4)
 Intel Pentium CPU N3710 1.60GHz, 1 CPU, 4 logical and 4 physical cores
-Frequency=1562452 Hz, Resolution=640.0197 ns, Timer=TSC
+Frequency=1562447 Hz, Resolution=640.0217 ns, Timer=TSC
   [Host]     : .NET Framework 4.7.2 (CLR 4.0.30319.42000), 32bit LegacyJIT-v4.7.3416.0
   DefaultJob : .NET Framework 4.7.2 (CLR 4.0.30319.42000), 32bit LegacyJIT-v4.7.3416.0
 
-|        Method |                          file |    Mean |    Error |   StdDev |
-|-------------- |-------------------------------|--------:|---------:|---------:|
-| SequentialSAT | 155Vars_1135Clauses_SAT.txt   | 2.548 s | 0.0106 s | 0.0099 s |
-|   ParallelSAT | 155Vars_1135Clauses_SAT.txt   | 1.070 s | 0.0213 s | 0.0421 s |
-| SequentialSAT | 42Vars_133Clauses_UNSAT.txt   | 1.868 s | 0.0037 s | 0.0034 s |
-|   ParallelSAT | 42Vars_133Clauses_UNSAT.txt   | 1.012 s | 0.0116 s | 0.0109 s |
-| SequentialSAT | 350Vars_1349Clauses_SAT.txt   | 1.147 s | 0.0031 s | 0.0027 s |
-|   ParallelSAT | 350Vars_1349Clauses_SAT.txt   | 7.243 s | 0.2181 s | 0.6430 s |
-| SequentialSAT | 350Vars_1349Clauses_UNSAT.txt | 7.011 s | 0.0227 s | 0.0213 s |
-|   ParallelSAT | 350Vars_1349Clauses_UNSAT.txt | 2.486 s | 0.0216 s | 0.0202 s |
+
+|        Method |                          file |       Mean |      Error |     StdDev |
+|-------------- |------------------------------ |-----------:|-----------:|-----------:|
+| SequentialSAT | 155Vars_1135Clauses_SAT.txt   | 1,093.4 ms |   1.390 ms |   1.232 ms |
+|   ParallelSAT | 155Vars_1135Clauses_SAT.txt   |   701.8 ms |  13.229 ms |  10.328 ms |
+| SequentialSAT | 350Vars_1349Clauses_SAT.txt   |   628.7 ms |   2.056 ms |   1.823 ms |
+|   ParallelSAT | 350Vars_1349Clauses_SAT.txt   | 4,496.8 ms | 186.012 ms | 548.461 ms |
+| SequentialSAT | 350Vars_1349Clauses_UNSAT.txt | 3,629.0 ms |   6.248 ms |   5.844 ms |
+|   ParallelSAT | 350Vars_1349Clauses_UNSAT.txt | 1,155.6 ms |  11.143 ms |  10.423 ms |
+| SequentialSAT | 42Vars_133Clauses_UNSAT.txt   | 1,211.3 ms |   2.586 ms |   2.159 ms |
+|   ParallelSAT | 42Vars_133Clauses_UNSAT.txt   |   958.5 ms |  10.896 ms |   9.659 ms |

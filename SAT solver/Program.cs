@@ -392,6 +392,8 @@ namespace SAT_solver
         {
             parallel = true;
 
+            SolverThread.SharedResult = new DPLLResultHolder(false, null);  // Assume unsat
+
             sharedModelQueue.Clear();
             sharedModelQueue.Enqueue(cnf);  // Initial formula (model) to solve
 
