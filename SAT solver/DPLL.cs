@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Threading;
-
-[assembly: InternalsVisibleTo("SAT solver benchmark")]
+using System.Threading.Tasks;
 
 namespace SAT_solver
 {
@@ -14,42 +12,77 @@ namespace SAT_solver
 
         private bool parallel = false;
 
-        public DPLLResultHolder SatisfiableParallel(CNF cnf)
+        public async Task<DPLLResultHolder> SatisfiableParallel(CNF cnf)
         {
             parallel = true;
-
-            SolverThread.SharedResult = new DPLLResultHolder(false, null);  // Assume unsat
 
             sharedModelQueue.Clear();
             sharedModelQueue.Enqueue(cnf);  // Initial formula (model) to solve
 
-            IdleThreadsCounter notWorkingThreadsCounter = new IdleThreadsCounter();
+            List<Task<DPLLResultHolder>> taskList = new List<Task<DPLLResultHolder>>();
 
-            List<SolverThread> threadList = new List<SolverThread>();
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            var token = cancellationTokenSource.Token;
 
-            // A temporal thread to start the other working threads
-            Thread starterThread = new Thread(() =>
+            var idleThreadsCounter = new IdleThreadsCounter();
+
+            for (int i = 0; i < Environment.ProcessorCount; i++)
             {
-                for (int i = 0; i < Environment.ProcessorCount; i++)
+                taskList.Add(Task.Run(() => Solve(this, sharedModelQueue, idleThreadsCounter, token), token));
+            }
+
+            var taskArray = taskList.ToArray();
+            var finalTask = await Task.WhenAny(taskArray);
+            cancellationTokenSource.Cancel();   // Cancel other tasks still solving SAT
+            lock (sharedModelQueue)
+            {
+                Monitor.PulseAll(sharedModelQueue); // Wake tasks waiting at the queue, so they can cancel
+            }
+
+            parallel = false;
+
+            return await finalTask;
+        }
+
+        // Each thread's "main" function
+        private DPLLResultHolder Solve(DPLL parallelDPLL, Queue<CNF> sharedModelQueue, IdleThreadsCounter idleThreadsCounter, CancellationToken token)
+        {
+            CNF model;
+
+            while (true)
+            {
+                lock (sharedModelQueue)
                 {
-                    threadList.Add(new SolverThread(this, sharedModelQueue, threadList, notWorkingThreadsCounter));
+                    while (sharedModelQueue.Count == 0)
+                    {
+                        Monitor.Wait(sharedModelQueue); // Wait if there's nothing to solve
+                        token.ThrowIfCancellationRequested();
+                    }
+
+                    Interlocked.Decrement(ref idleThreadsCounter.Counter);  // This task started working - is no longer idle
+                    model = sharedModelQueue.Dequeue(); // Get a CNF model from the shared queue
                 }
 
-                lock (sharedModelQueue)    // So threads start working as soon as all threads are started (they will be waiting for this to unlock)
+                token.ThrowIfCancellationRequested();
+                DPLLResultHolder solverThreadResult = parallelDPLL.Satisfiable(model);
+
+                if (solverThreadResult.SAT)
                 {
-                    foreach (var thread in threadList)
+                    return solverThreadResult;  // The task has found SAT model
+                }
+                else
+                {
+                    Interlocked.Increment(ref idleThreadsCounter.Counter);  // The task is idle for now
+                }
+
+                lock (sharedModelQueue)
+                {
+                    // If all threads are idle and the queue is empty -> we're done and result remains unsat
+                    if (Interlocked.Read(ref idleThreadsCounter.Counter) == Environment.ProcessorCount && sharedModelQueue.Count == 0)
                     {
-                        thread.Start();
+                        return solverThreadResult;
                     }
                 }
-            });
-
-            lock (SolverThread.SharedResult)
-            {
-                starterThread.Start();
-                Monitor.Wait(SolverThread.SharedResult);    // Wait for the final result
-                parallel = false;
-                return SolverThread.SharedResult;
             }
         }
 
@@ -92,7 +125,7 @@ namespace SAT_solver
                 }
 
                 variable = FindUnassigned(stack.Peek());
-                if (variable != null)   // If we have found a unassigned variable, we are at the decision (branching) point
+                if (variable != null)   // If we have found an unassigned variable, we are at the decision (branching) point
                 {
                     Branch(stack, variable);
 
@@ -298,6 +331,16 @@ namespace SAT_solver
             {
                 return "Unsatisfiable.";
             }
+        }
+    }
+
+    internal class IdleThreadsCounter
+    {
+        public long Counter;    // Counts the number of idle threads (long for Interlocked.Read, ...)
+
+        public IdleThreadsCounter()
+        {
+            Counter = Environment.ProcessorCount;
         }
     }
 }

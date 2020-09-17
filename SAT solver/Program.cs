@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Runtime.CompilerServices;
-
-[assembly: InternalsVisibleTo("SAT solver benchmark")]
+using System.Threading.Tasks;
 
 namespace SAT_solver
 {
@@ -61,6 +59,76 @@ namespace SAT_solver
             Console.WriteLine("");
         }
 
+        static void SATSolver()
+        {
+            PrintSATSolverUsage();
+
+            CNF cnf = new CNF();
+            cnf.ReadFormula(Console.In);
+
+            // Sequential solution
+            /*CNF cnfCopy = new CNF(cnf);
+            DPLL sequentialDPLL = new DPLL();
+            DPLLResultHolder sequentialResult = sequentialDPLL.Satisfiable(cnfCopy);
+            Console.WriteLine();
+            Console.WriteLine(sequentialResult);*/
+
+            // Parallel solution
+            DPLL parallelDPLL = new DPLL();
+            Task<DPLLResultHolder> parallelSAT = parallelDPLL.SatisfiableParallel(cnf);
+            parallelSAT.Wait();
+            Console.WriteLine();
+            Console.WriteLine(parallelSAT.Result);
+        }
+
+        static void IndependentSetProblem()
+        {
+            PrintIndependentSetUsage();
+
+            IndependentSetProblem problem = new IndependentSetProblem();
+            problem.ReadInput(Console.In);
+
+            CNF problemCNF = problem.ConvertToCNF();
+
+            DPLL problemDPLL = new DPLL();
+            Task<DPLLResultHolder> parallelSAT = problemDPLL.SatisfiableParallel(problemCNF);
+            parallelSAT.Wait();
+            Console.WriteLine();
+            Console.WriteLine(problem.InterpretDPLLResult(parallelSAT.Result));
+        }
+
+        static void ThreeColorabilityProblem()
+        {
+            Print3ColorabilityUsage();
+
+            ThreeColorabilityProblem problem = new ThreeColorabilityProblem();
+            problem.ReadInput(Console.In);
+
+            CNF problemCNF = problem.ConvertToCNF();
+
+            DPLL problemDPLL = new DPLL();
+            Task<DPLLResultHolder> parallelSAT = problemDPLL.SatisfiableParallel(problemCNF);
+            parallelSAT.Wait();
+            Console.WriteLine();
+            Console.WriteLine(problem.InterpretDPLLResult(parallelSAT.Result));
+        }
+
+        static void HamiltonianPathProblem()
+        {
+            PrintHamiltonianPathUsage();
+
+            HamiltonianPathProblem problem = new HamiltonianPathProblem();
+            problem.ReadInput(Console.In);
+
+            CNF problemCNF = problem.ConvertToCNF();
+
+            DPLL problemDPLL = new DPLL();
+            Task<DPLLResultHolder> parallelSAT = problemDPLL.SatisfiableParallel(problemCNF);
+            parallelSAT.Wait();
+            Console.WriteLine();
+            Console.WriteLine(problem.InterpretDPLLResult(parallelSAT.Result));
+        }
+
         static void Main(string[] args)
         {
             while (true)
@@ -73,71 +141,20 @@ namespace SAT_solver
 
                     switch (problemNumber)
                     {
-                        case 1: // SAT solver
-                            PrintSATSolverUsage();
-
-                            CNF cnf = new CNF();
-                            cnf.ReadFormula(Console.In);
-
-                            CNF cnfCopy = new CNF(cnf);
-
-                            // Sequential solution
-                            DPLL sequentialDPLL = new DPLL();
-                            DPLLResultHolder sequentialResult = sequentialDPLL.Satisfiable(cnf);
-                            Console.WriteLine();
-                            Console.WriteLine(sequentialResult);
-
-                            // Parallel solution
-                            DPLL parallelDPLL = new DPLL();
-                            DPLLResultHolder parallelResult = parallelDPLL.SatisfiableParallel(cnfCopy);
-                            Console.WriteLine();
-                            Console.WriteLine(parallelResult);
-
+                        case 1:
+                            SATSolver();
                             break;
 
-                        case 2: // Independent set problem
-                            PrintIndependentSetUsage();
-
-                            IndependentSetProblem independentSetProblem = new IndependentSetProblem();
-                            independentSetProblem.ReadInput(Console.In);
-
-                            CNF independentSetProblemCNF = independentSetProblem.ConvertToCNF();
-
-                            DPLL independentSetProblemDPLLParallel = new DPLL();
-                            DPLLResultHolder independentSetProblemDPLLResultParallel = independentSetProblemDPLLParallel.SatisfiableParallel(independentSetProblemCNF);
-                            Console.WriteLine();
-                            Console.WriteLine(independentSetProblem.InterpretDPLLResult(independentSetProblemDPLLResultParallel));
-
+                        case 2:
+                            IndependentSetProblem();
                             break;
 
-                        case 3: // 3-Colorability problem
-                            Print3ColorabilityUsage();
-
-                            ThreeColorabilityProblem threeColorabilityProblem = new ThreeColorabilityProblem();
-                            threeColorabilityProblem.ReadInput(Console.In);
-
-                            CNF threeColorabilityProblemCNF = threeColorabilityProblem.ConvertToCNF();
-
-                            DPLL threeColorabilityProblemDPLLParallel = new DPLL();
-                            DPLLResultHolder threeColorabilityProblemDPLLResultParallel = threeColorabilityProblemDPLLParallel.SatisfiableParallel(threeColorabilityProblemCNF);
-                            Console.WriteLine();
-                            Console.WriteLine(threeColorabilityProblem.InterpretDPLLResult(threeColorabilityProblemDPLLResultParallel));
-
+                        case 3:
+                            ThreeColorabilityProblem();
                             break;
 
-                        case 4: // Hamiltonian path problem
-                            PrintHamiltonianPathUsage();
-
-                            HamiltonianPathProblem hamiltonianPathProblem = new HamiltonianPathProblem();
-                            hamiltonianPathProblem.ReadInput(Console.In);
-
-                            CNF hamiltonianPathProblemCNF = hamiltonianPathProblem.ConvertToCNF();
-
-                            DPLL hamiltonianPathProblemDPLLParallel = new DPLL();
-                            DPLLResultHolder hamiltonianPathProblemDPLLResultParallel = hamiltonianPathProblemDPLLParallel.SatisfiableParallel(hamiltonianPathProblemCNF);
-                            Console.WriteLine();
-                            Console.WriteLine(hamiltonianPathProblem.InterpretDPLLResult(hamiltonianPathProblemDPLLResultParallel));
-
+                        case 4:
+                            HamiltonianPathProblem();
                             break;
 
                         default:    // Everything else will exit the program
